@@ -1,0 +1,41 @@
+﻿# terraform
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.tfplan.*
+crash.log
+crash.*.log
+*.tfvars
+!*.tfvars.example
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+.terraform/
+.terraform.lock.hcl
+
+# azure
+.azure/
+
+# secrets
+*.pem
+*.key
+*.crt
+secrets/
+.env
+.env.local
+
+# ide
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# logs
+*.log
+logs/
