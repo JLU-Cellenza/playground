@@ -16,6 +16,8 @@ resource "azurerm_logic_app_standard" "this" {
   storage_account_name       = var.storage_account_name
   storage_account_access_key = var.storage_account_access_key
   version                    = "~4"
+  https_only                 = true
+  client_affinity_enabled    = false
 
   app_settings = merge(
     {
@@ -30,11 +32,23 @@ resource "azurerm_logic_app_standard" "this" {
     var.additional_app_settings
   )
 
+  site_config {
+    always_on = false
+    use_32_bit_worker_process = false
+  }
+
   identity {
     type = "SystemAssigned"
   }
 
   tags = var.tags
+
+  lifecycle {
+    ignore_changes = [
+      app_settings["WEBSITE_CONTENTAZUREFILECONNECTIONSTRING"],
+      app_settings["WEBSITE_CONTENTSHARE"]
+    ]
+  }
 }
 
 resource "azurerm_monitor_diagnostic_setting" "this" {

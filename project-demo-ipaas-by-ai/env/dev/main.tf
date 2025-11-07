@@ -177,6 +177,12 @@ module "logicapp_01" {
   log_analytics_workspace_id       = module.log_analytics.workspace_id
 
   tags = local.common_tags
+
+  depends_on = [
+    module.storage_logicapp_01,
+    module.app_insights,
+    module.servicebus
+  ]
 }
 
 # Logic App Standard 02 (Workflow 2)
@@ -197,6 +203,13 @@ module "logicapp_02" {
   log_analytics_workspace_id       = module.log_analytics.workspace_id
 
   tags = local.common_tags
+
+  depends_on = [
+    module.storage_logicapp_02,
+    module.app_insights,
+    module.servicebus,
+    module.logicapp_01  # Create Logic App 02 after Logic App 01 to avoid simultaneous API calls
+  ]
 }
 
 # API Management
