@@ -33,14 +33,18 @@ jobs:
         env:
           AZCREDS: ${{ secrets.AZURE_CREDENTIALS }}
         run: |
-          python3 -c "
+          cat > /tmp/parse_creds.py << 'PYTHON_EOF'
 import json, os
 creds = json.loads(os.environ['AZCREDS'])
-print(f'ARM_CLIENT_ID={creds[\"clientId\"]}')
-print(f'ARM_CLIENT_SECRET={creds[\"clientSecret\"]}')
-print(f'ARM_TENANT_ID={creds[\"tenantId\"]}')
-print(f'ARM_SUBSCRIPTION_ID={creds[\"subscriptionId\"]}')
-          " >> $GITHUB_ENV
+env_str = f"ARM_CLIENT_ID={creds['clientId']}\n"
+env_str += f"ARM_CLIENT_SECRET={creds['clientSecret']}\n"
+env_str += f"ARM_TENANT_ID={creds['tenantId']}\n"
+env_str += f"ARM_SUBSCRIPTION_ID={creds['subscriptionId']}\n"
+with open(os.environ['GITHUB_ENV'], 'a') as f:
+    f.write(env_str)
+PYTHON_EOF
+          python3 /tmp/parse_creds.py
+          rm /tmp/parse_creds.py
 
       - name: Set env path
         id: setenv
