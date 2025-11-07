@@ -1,6 +1,6 @@
-resource_group_name  = "rg-terraform-state-<SUBSCRIPTION>"
-storage_account_name = "stterraformstate<UNIQUE_SUFFIX>"
-container_name       = "tfstate"
+resource_group_name  = "rg-common-iac-01"
+storage_account_name = "stocommoniac398"
+container_name       = "terraform"
 key                  = "mvp-ipaas-prd.tfstate"
 
 # Notes:
