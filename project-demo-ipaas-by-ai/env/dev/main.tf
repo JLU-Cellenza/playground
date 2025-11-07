@@ -70,7 +70,7 @@ module "app_insights" {
 module "storage_functions" {
   source = "../../modules/storage"
 
-  storage_account_name       = "stfn${var.environment}${var.organization}${var.project}01"
+  storage_account_name       = "stfndev${var.project}01"
   location                   = var.location
   resource_group_name        = azurerm_resource_group.this.name
   account_tier               = "Standard"
@@ -85,7 +85,7 @@ module "storage_functions" {
 module "storage_logicapp_01" {
   source = "../../modules/storage"
 
-  storage_account_name       = "stla${var.environment}${var.organization}${var.project}01"
+  storage_account_name       = "stladev${var.project}01"
   location                   = var.location
   resource_group_name        = azurerm_resource_group.this.name
   account_tier               = "Standard"
@@ -100,7 +100,7 @@ module "storage_logicapp_01" {
 module "storage_logicapp_02" {
   source = "../../modules/storage"
 
-  storage_account_name       = "stla${var.environment}${var.organization}${var.project}02"
+  storage_account_name       = "stladev${var.project}02"
   location                   = var.location
   resource_group_name        = azurerm_resource_group.this.name
   account_tier               = "Standard"
@@ -115,7 +115,7 @@ module "storage_logicapp_02" {
 module "storage_platform" {
   source = "../../modules/storage"
 
-  storage_account_name       = "stpl${var.environment}${var.organization}${var.project}01"
+  storage_account_name       = "stpldev${var.project}01"
   location                   = var.location
   resource_group_name        = azurerm_resource_group.this.name
   account_tier               = "Standard"
