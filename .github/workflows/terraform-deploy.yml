@@ -27,6 +27,9 @@ jobs:
         working-directory: project-demo-ipaas-by-ai/env/${{ github.event.inputs.environment }}
     
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Validate Confirmation
         run: |
           if [ "${{ github.event.inputs.confirm }}" != "YES" ]; then
@@ -40,9 +43,6 @@ jobs:
             echo "::error::TERRAFORM_APPLY secret is not set to 'true'. Deployment blocked."
             exit 1
           fi
-
-      - name: Checkout
-        uses: actions/checkout@v4
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
