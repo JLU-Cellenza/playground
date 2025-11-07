@@ -1,0 +1,60 @@
+name: Terraform Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy (dev or prd)'
+        required: true
+        default: 'dev'
+      confirm:
+        description: 'Type YES to confirm apply'
+        required: true
+        default: 'NO'
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: '1.5.0'
+
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Set env path
+        id: setenv
+        run: |
+          echo "env_path=env/${{ github.event.inputs.environment }}" >> $GITHUB_OUTPUT
+
+      - name: Terraform Init
+        working-directory: ${{ steps.setenv.outputs.env_path }}
+        run: |
+          terraform init -input=false \
+            -backend-config="resource_group_name=${{ secrets.BACKEND_RG }}" \
+            -backend-config="storage_account_name=${{ secrets.BACKEND_SA }}" \
+            -backend-config="container_name=${{ secrets.BACKEND_CONTAINER }}" \
+            -backend-config="key=mvp-ipaas-${{ github.event.inputs.environment }}.tfstate"
+
+      - name: Terraform Plan
+        working-directory: ${{ steps.setenv.outputs.env_path }}
+        run: |
+          terraform plan -out=plan.tfplan
+
+      - name: Confirm and Apply
+        if: ${{ github.event.inputs.confirm == 'YES' }}
+        working-directory: ${{ steps.setenv.outputs.env_path }}
+        env:
+          TERRAFORM_APPLY: ${{ secrets.TERRAFORM_APPLY }}
+        run: |
+          if [ "$TERRAFORM_APPLY" != "true" ]; then
+            echo "TERRAFORM_APPLY secret not set to 'true'. Aborting apply."; exit 1
+          fi
+          terraform apply -input=false plan.tfplan
