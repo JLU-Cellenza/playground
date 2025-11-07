@@ -7,6 +7,10 @@ on:
         description: 'Environment to deploy (dev or prd)'
         required: true
         default: 'dev'
+        type: choice
+        options:
+          - dev
+          - prd
       confirm:
         description: 'Type YES to confirm apply'
         required: true
@@ -14,61 +18,76 @@ on:
 
 jobs:
   apply:
+    name: Deploy to ${{ github.event.inputs.environment }}
     runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+    
+    defaults:
+      run:
+        working-directory: project-demo-ipaas-by-ai/env/${{ github.event.inputs.environment }}
+    
     steps:
+      - name: Validate Confirmation
+        run: |
+          if [ "${{ github.event.inputs.confirm }}" != "YES" ]; then
+            echo "::error::Deployment not confirmed. You must type 'YES' to proceed."
+            exit 1
+          fi
+
+      - name: Check Apply Secret
+        run: |
+          if [ "${{ secrets.TERRAFORM_APPLY }}" != "true" ]; then
+            echo "::error::TERRAFORM_APPLY secret is not set to 'true'. Deployment blocked."
+            exit 1
+          fi
+
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v2
+        uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: '1.5.0'
 
       - name: Azure Login
-        uses: azure/login@v1
+        uses: azure/login@v2
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Export ARM environment variables for Terraform
-        env:
-          AZCREDS: ${{ secrets.AZURE_CREDENTIALS }}
+      - name: Get Azure Subscription ID
+        id: subscription
         run: |
-          CLIENT_ID=$(echo $AZCREDS | jq -r '.clientId')
-          CLIENT_SECRET=$(echo $AZCREDS | jq -r '.clientSecret')
-          TENANT_ID=$(echo $AZCREDS | jq -r '.tenantId')
-          SUBSCRIPTION_ID=$(echo $AZCREDS | jq -r '.subscriptionId')
-          echo "ARM_CLIENT_ID=$CLIENT_ID" >> $GITHUB_ENV
-          echo "ARM_CLIENT_SECRET=$CLIENT_SECRET" >> $GITHUB_ENV
-          echo "ARM_TENANT_ID=$TENANT_ID" >> $GITHUB_ENV
-          echo "ARM_SUBSCRIPTION_ID=$SUBSCRIPTION_ID" >> $GITHUB_ENV
-
-      - name: Set env path
-        id: setenv
-        run: |
-          echo "env_path=project-demo-ipaas-by-ai/env/${{ github.event.inputs.environment }}" >> $GITHUB_OUTPUT
-          echo "env_name=${{ github.event.inputs.environment }}" >> $GITHUB_OUTPUT
+          SUBSCRIPTION_ID=$(az account show --query id -o tsv)
+          echo "subscription_id=$SUBSCRIPTION_ID" >> $GITHUB_OUTPUT
 
       - name: Terraform Init
-        working-directory: ${{ steps.setenv.outputs.env_path }}
-        run: |
-          terraform init -input=false \
-            -backend-config="resource_group_name=${{ secrets.BACKEND_RG }}" \
-            -backend-config="storage_account_name=${{ secrets.BACKEND_SA }}" \
-            -backend-config="container_name=${{ secrets.BACKEND_CONTAINER }}" \
-            -backend-config="key=mvp-ipaas-${{ steps.setenv.outputs.env_name }}.tfstate"
+        run: terraform init -backend-config=backend.tfvars
+        env:
+          ARM_SUBSCRIPTION_ID: ${{ steps.subscription.outputs.subscription_id }}
+          ARM_CLIENT_ID: ${{ fromJSON(secrets.AZURE_CREDENTIALS).clientId }}
+          ARM_CLIENT_SECRET: ${{ fromJSON(secrets.AZURE_CREDENTIALS).clientSecret }}
+          ARM_TENANT_ID: ${{ fromJSON(secrets.AZURE_CREDENTIALS).tenantId }}
 
       - name: Terraform Plan
-        working-directory: ${{ steps.setenv.outputs.env_path }}
-        run: |
-          terraform plan -out=plan.tfplan
-
-      - name: Confirm and Apply
-        if: ${{ github.event.inputs.confirm == 'YES' }}
-        working-directory: ${{ steps.setenv.outputs.env_path }}
+        run: terraform plan -var-file=${{ github.event.inputs.environment }}.tfvars -out=plan.tfplan
         env:
-          TERRAFORM_APPLY: ${{ secrets.TERRAFORM_APPLY }}
+          ARM_SUBSCRIPTION_ID: ${{ steps.subscription.outputs.subscription_id }}
+          ARM_CLIENT_ID: ${{ fromJSON(secrets.AZURE_CREDENTIALS).clientId }}
+          ARM_CLIENT_SECRET: ${{ fromJSON(secrets.AZURE_CREDENTIALS).clientSecret }}
+          ARM_TENANT_ID: ${{ fromJSON(secrets.AZURE_CREDENTIALS).tenantId }}
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve plan.tfplan
+        env:
+          ARM_SUBSCRIPTION_ID: ${{ steps.subscription.outputs.subscription_id }}
+          ARM_CLIENT_ID: ${{ fromJSON(secrets.AZURE_CREDENTIALS).clientId }}
+          ARM_CLIENT_SECRET: ${{ fromJSON(secrets.AZURE_CREDENTIALS).clientSecret }}
+          ARM_TENANT_ID: ${{ fromJSON(secrets.AZURE_CREDENTIALS).tenantId }}
+
+      - name: Deployment Summary
         run: |
-          if [ "$TERRAFORM_APPLY" != "true" ]; then
-            echo "TERRAFORM_APPLY secret not set to 'true'. Aborting apply."; exit 1
-          fi
-          terraform apply -input=false plan.tfplan
+          echo "### ✅ Deployment Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment**: ${{ github.event.inputs.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Deployed by**: @${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
