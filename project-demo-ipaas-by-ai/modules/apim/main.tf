@@ -14,7 +14,6 @@ resource "azurerm_api_management" "this" {
 }
 
 resource "azurerm_monitor_diagnostic_setting" "this" {
-  count                      = var.log_analytics_workspace_id != null ? 1 : 0
   name                       = "diag-${var.apim_name}"
   target_resource_id         = azurerm_api_management.this.id
   log_analytics_workspace_id = var.log_analytics_workspace_id

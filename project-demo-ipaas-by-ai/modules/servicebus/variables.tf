@@ -50,9 +50,8 @@ variable "default_message_ttl" {
 }
 
 variable "log_analytics_workspace_id" {
-  description = "The ID of the Log Analytics Workspace"
+  description = "The ID of the Log Analytics Workspace for diagnostics"
   type        = string
-  default     = null
 }
 
 variable "tags" {

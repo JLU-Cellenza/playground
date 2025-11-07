@@ -20,7 +20,6 @@ resource "azurerm_servicebus_queue" "queues" {
 }
 
 resource "azurerm_monitor_diagnostic_setting" "this" {
-  count                      = var.log_analytics_workspace_id != null ? 1 : 0
   name                       = "diag-${var.namespace_name}"
   target_resource_id         = azurerm_servicebus_namespace.this.id
   log_analytics_workspace_id = var.log_analytics_workspace_id

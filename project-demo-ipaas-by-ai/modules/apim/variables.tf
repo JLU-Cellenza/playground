@@ -32,7 +32,6 @@ variable "sku_name" {
 variable "log_analytics_workspace_id" {
   description = "The ID of the Log Analytics Workspace"
   type        = string
-  default     = null
 }
 
 variable "tags" {

@@ -42,7 +42,6 @@ resource "azurerm_linux_function_app" "this" {
 }
 
 resource "azurerm_monitor_diagnostic_setting" "this" {
-  count                      = var.log_analytics_workspace_id != null ? 1 : 0
   name                       = "diag-${var.function_app_name}"
   target_resource_id         = azurerm_linux_function_app.this.id
   log_analytics_workspace_id = var.log_analytics_workspace_id

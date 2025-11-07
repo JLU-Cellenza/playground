@@ -38,7 +38,6 @@ resource "azurerm_logic_app_standard" "this" {
 }
 
 resource "azurerm_monitor_diagnostic_setting" "this" {
-  count                      = var.log_analytics_workspace_id != null ? 1 : 0
   name                       = "diag-${var.logic_app_name}"
   target_resource_id         = azurerm_logic_app_standard.this.id
   log_analytics_workspace_id = var.log_analytics_workspace_id
