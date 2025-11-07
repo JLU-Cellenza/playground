@@ -1,4 +1,4 @@
-﻿# modules/log_analytics/outputs.tf
+# modules/log_analytics/outputs.tf
 
 output "workspace_id" {
   description = "The ID of the Log Analytics Workspace"

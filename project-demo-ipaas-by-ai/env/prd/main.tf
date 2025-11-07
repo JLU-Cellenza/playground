@@ -144,17 +144,17 @@ module "servicebus" {
 module "function_app" {
   source = "../../modules/function_app"
 
-  function_app_name                   = "func-${var.environment}-${var.organization}-${var.project}-helpers-01"
-  service_plan_name                   = "asp-${var.environment}-${var.organization}-${var.project}-func-01"
-  location                            = var.location
-  resource_group_name                 = azurerm_resource_group.this.name
-  sku_name                            = "Y1"
-  storage_account_name                = module.storage_functions.name
-  storage_account_access_key          = module.storage_functions.primary_access_key
-  app_insights_connection_string      = module.app_insights.connection_string
-  app_insights_instrumentation_key    = module.app_insights.instrumentation_key
-  servicebus_namespace_fqdn           = "${module.servicebus.namespace_name}.servicebus.windows.net"
-  log_analytics_workspace_id          = module.log_analytics.workspace_id
+  function_app_name                = "func-${var.environment}-${var.organization}-${var.project}-helpers-01"
+  service_plan_name                = "asp-${var.environment}-${var.organization}-${var.project}-func-01"
+  location                         = var.location
+  resource_group_name              = azurerm_resource_group.this.name
+  sku_name                         = "Y1"
+  storage_account_name             = module.storage_functions.name
+  storage_account_access_key       = module.storage_functions.primary_access_key
+  app_insights_connection_string   = module.app_insights.connection_string
+  app_insights_instrumentation_key = module.app_insights.instrumentation_key
+  servicebus_namespace_fqdn        = "${module.servicebus.namespace_name}.servicebus.windows.net"
+  log_analytics_workspace_id       = module.log_analytics.workspace_id
 
   tags = local.common_tags
 }
@@ -163,18 +163,18 @@ module "function_app" {
 module "logicapp_01" {
   source = "../../modules/logicapp"
 
-  logic_app_name                      = "loa-${var.environment}-${var.organization}-${var.project}-workflow-01"
-  service_plan_name                   = "asp-${var.environment}-${var.organization}-${var.project}-loa-01"
-  location                            = var.location
-  resource_group_name                 = azurerm_resource_group.this.name
-  sku_name                            = "WS1"
-  storage_account_name                = module.storage_logicapp_01.name
-  storage_account_access_key          = module.storage_logicapp_01.primary_access_key
-  storage_connection_string           = module.storage_logicapp_01.primary_connection_string
-  app_insights_connection_string      = module.app_insights.connection_string
-  app_insights_instrumentation_key    = module.app_insights.instrumentation_key
-  servicebus_namespace_fqdn           = "${module.servicebus.namespace_name}.servicebus.windows.net"
-  log_analytics_workspace_id          = module.log_analytics.workspace_id
+  logic_app_name                   = "loa-${var.environment}-${var.organization}-${var.project}-workflow-01"
+  service_plan_name                = "asp-${var.environment}-${var.organization}-${var.project}-loa-01"
+  location                         = var.location
+  resource_group_name              = azurerm_resource_group.this.name
+  sku_name                         = "WS1"
+  storage_account_name             = module.storage_logicapp_01.name
+  storage_account_access_key       = module.storage_logicapp_01.primary_access_key
+  storage_connection_string        = module.storage_logicapp_01.primary_connection_string
+  app_insights_connection_string   = module.app_insights.connection_string
+  app_insights_instrumentation_key = module.app_insights.instrumentation_key
+  servicebus_namespace_fqdn        = "${module.servicebus.namespace_name}.servicebus.windows.net"
+  log_analytics_workspace_id       = module.log_analytics.workspace_id
 
   tags = local.common_tags
 }
@@ -183,18 +183,18 @@ module "logicapp_01" {
 module "logicapp_02" {
   source = "../../modules/logicapp"
 
-  logic_app_name                      = "loa-${var.environment}-${var.organization}-${var.project}-workflow-02"
-  service_plan_name                   = "asp-${var.environment}-${var.organization}-${var.project}-loa-02"
-  location                            = var.location
-  resource_group_name                 = azurerm_resource_group.this.name
-  sku_name                            = "WS1"
-  storage_account_name                = module.storage_logicapp_02.name
-  storage_account_access_key          = module.storage_logicapp_02.primary_access_key
-  storage_connection_string           = module.storage_logicapp_02.primary_connection_string
-  app_insights_connection_string      = module.app_insights.connection_string
-  app_insights_instrumentation_key    = module.app_insights.instrumentation_key
-  servicebus_namespace_fqdn           = "${module.servicebus.namespace_name}.servicebus.windows.net"
-  log_analytics_workspace_id          = module.log_analytics.workspace_id
+  logic_app_name                   = "loa-${var.environment}-${var.organization}-${var.project}-workflow-02"
+  service_plan_name                = "asp-${var.environment}-${var.organization}-${var.project}-loa-02"
+  location                         = var.location
+  resource_group_name              = azurerm_resource_group.this.name
+  sku_name                         = "WS1"
+  storage_account_name             = module.storage_logicapp_02.name
+  storage_account_access_key       = module.storage_logicapp_02.primary_access_key
+  storage_connection_string        = module.storage_logicapp_02.primary_connection_string
+  app_insights_connection_string   = module.app_insights.connection_string
+  app_insights_instrumentation_key = module.app_insights.instrumentation_key
+  servicebus_namespace_fqdn        = "${module.servicebus.namespace_name}.servicebus.windows.net"
+  log_analytics_workspace_id       = module.log_analytics.workspace_id
 
   tags = local.common_tags
 }

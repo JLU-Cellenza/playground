@@ -19,12 +19,12 @@ resource "azurerm_logic_app_standard" "this" {
 
   app_settings = merge(
     {
-      "FUNCTIONS_WORKER_RUNTIME"     = "node"
-      "WEBSITE_NODE_DEFAULT_VERSION" = "~18"
-      "WEBSITE_RUN_FROM_PACKAGE"     = "1"
-      "AzureWebJobsStorage"          = var.storage_connection_string
-      "APPINSIGHTS_INSTRUMENTATIONKEY" = var.app_insights_instrumentation_key
-      "APPLICATIONINSIGHTS_CONNECTION_STRING" = var.app_insights_connection_string
+      "FUNCTIONS_WORKER_RUNTIME"                       = "node"
+      "WEBSITE_NODE_DEFAULT_VERSION"                   = "~18"
+      "WEBSITE_RUN_FROM_PACKAGE"                       = "1"
+      "AzureWebJobsStorage"                            = var.storage_connection_string
+      "APPINSIGHTS_INSTRUMENTATIONKEY"                 = var.app_insights_instrumentation_key
+      "APPLICATIONINSIGHTS_CONNECTION_STRING"          = var.app_insights_connection_string
       "SERVICEBUS_CONNECTION__fullyQualifiedNamespace" = var.servicebus_namespace_fqdn
     },
     var.additional_app_settings

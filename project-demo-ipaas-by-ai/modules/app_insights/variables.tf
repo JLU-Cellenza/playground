@@ -1,4 +1,4 @@
-﻿variable "app_insights_name" {
+variable "app_insights_name" {
   description = "The name of the Application Insights instance"
   type        = string
 }

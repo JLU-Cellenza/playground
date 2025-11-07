@@ -1,4 +1,4 @@
-﻿output "id" {
+output "id" {
   description = "Application Insights ID"
   value       = azurerm_application_insights.this.id
 }

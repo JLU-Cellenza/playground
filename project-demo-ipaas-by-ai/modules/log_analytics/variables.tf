@@ -1,4 +1,4 @@
-﻿# modules/log_analytics/variables.tf
+# modules/log_analytics/variables.tf
 
 variable "workspace_name" {
   description = "The name of the Log Analytics Workspace"

@@ -27,8 +27,8 @@ resource "azurerm_linux_function_app" "this" {
 
   app_settings = merge(
     {
-      "FUNCTIONS_WORKER_RUNTIME"       = "dotnet-isolated"
-      "WEBSITE_RUN_FROM_PACKAGE"       = "1"
+      "FUNCTIONS_WORKER_RUNTIME"                       = "dotnet-isolated"
+      "WEBSITE_RUN_FROM_PACKAGE"                       = "1"
       "SERVICEBUS_CONNECTION__fullyQualifiedNamespace" = var.servicebus_namespace_fqdn
     },
     var.additional_app_settings
