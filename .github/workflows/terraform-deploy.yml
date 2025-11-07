@@ -33,14 +33,14 @@ jobs:
         env:
           AZCREDS: ${{ secrets.AZURE_CREDENTIALS }}
         run: |
-          python3 <<'PYSCRIPT'
+          python3 -c "
 import json, os
 creds = json.loads(os.environ['AZCREDS'])
-print(f"ARM_CLIENT_ID={creds['clientId']}")
-print(f"ARM_CLIENT_SECRET={creds['clientSecret']}")
-print(f"ARM_TENANT_ID={creds['tenantId']}")
-print(f"ARM_SUBSCRIPTION_ID={creds['subscriptionId']}")
-PYSCRIPT >> $GITHUB_ENV
+print(f'ARM_CLIENT_ID={creds[\"clientId\"]}')
+print(f'ARM_CLIENT_SECRET={creds[\"clientSecret\"]}')
+print(f'ARM_TENANT_ID={creds[\"tenantId\"]}')
+print(f'ARM_SUBSCRIPTION_ID={creds[\"subscriptionId\"]}')
+          " >> $GITHUB_ENV
 
       - name: Set env path
         id: setenv
