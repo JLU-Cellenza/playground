@@ -32,7 +32,8 @@ jobs:
       - name: Set env path
         id: setenv
         run: |
-          echo "env_path=env/${{ github.event.inputs.environment }}" >> $GITHUB_OUTPUT
+          echo "env_path=project-demo-ipaas-by-ai/env/${{ github.event.inputs.environment }}" >> $GITHUB_OUTPUT
+          echo "env_name=${{ github.event.inputs.environment }}" >> $GITHUB_OUTPUT
 
       - name: Terraform Init
         working-directory: ${{ steps.setenv.outputs.env_path }}
@@ -41,7 +42,7 @@ jobs:
             -backend-config="resource_group_name=${{ secrets.BACKEND_RG }}" \
             -backend-config="storage_account_name=${{ secrets.BACKEND_SA }}" \
             -backend-config="container_name=${{ secrets.BACKEND_CONTAINER }}" \
-            -backend-config="key=mvp-ipaas-${{ github.event.inputs.environment }}.tfstate"
+            -backend-config="key=mvp-ipaas-${{ steps.setenv.outputs.env_name }}.tfstate"
 
       - name: Terraform Plan
         working-directory: ${{ steps.setenv.outputs.env_path }}

@@ -44,7 +44,9 @@ jobs:
             # default to dev for CI runs; PRs run dev plan by default
             ENV=dev
           fi
-          echo "env_path=env/$ENV" >> $GITHUB_OUTPUT
+          # point to the project's env folder and expose the environment name separately
+          echo "env_path=project-demo-ipaas-by-ai/env/$ENV" >> $GITHUB_OUTPUT
+          echo "env_name=$ENV" >> $GITHUB_OUTPUT
 
       - name: Terraform Format
         working-directory: ${{ steps.envpath.outputs.env_path }}
@@ -58,7 +60,7 @@ jobs:
             -backend-config="resource_group_name=${{ secrets.BACKEND_RG }}" \
             -backend-config="storage_account_name=${{ secrets.BACKEND_SA }}" \
             -backend-config="container_name=${{ secrets.BACKEND_CONTAINER }}" \
-            -backend-config="key=mvp-ipaas-${{ steps.envpath.outputs.env_path }}.tfstate"
+            -backend-config="key=mvp-ipaas-${{ steps.envpath.outputs.env_name }}.tfstate"
 
       - name: Terraform Validate
         working-directory: ${{ steps.envpath.outputs.env_path }}
