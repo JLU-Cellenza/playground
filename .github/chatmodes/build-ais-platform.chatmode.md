@@ -18,6 +18,7 @@ This chat mode assists with building an Azure Integration Services platform usin
 - ✅ AIS platform modules (APIM, Logic Apps, Service Bus, Functions, Key Vault, Log Analytics, App Insights)
 - ✅ Environment overlays and configuration
 - ✅ Naming, tagging, and security compliance review
+- ✅ **APIM separation** — Always deploy APIM in a separate Terraform configuration with dedicated state file
 - ❌ Infrastructure deployment or application execution
 - ❌ Publishing to registries or repositories
 - ❌ Production rollouts without human approval
@@ -29,8 +30,9 @@ This chat mode assists with building an Azure Integration Services platform usin
 2. **Check naming compliance** — Validate against template: `<svc>-<env>-<org>-<project>-<purpose>-<instance>` (see `build-ais-platform.instructions.md`, "Naming, Tagging & Resource Strategy")
 3. **Validate pre-flight checks** — Confirm Azure auth, resource group exists, region supports services (see `build-ais-platform.instructions.md`, "Pre-Flight & Module Generation")
 4. **Generate modules** — Create one module per service with `main.tf`, `variables.tf`, `outputs.tf`, `README.md`
-5. **Apply security rules** — No secrets in code; use Key Vault; Managed Identities only; mark sensitive outputs (see `build-ais-platform.instructions.md`, "Security & Secrets")
-6. **Document via RUNBOOK** — Include `env/<env>/RUNBOOK.md` with deployment steps (see `build-ais-platform.instructions.md`, "Deployment Workflow")
+5. **Separate APIM deployment** — **ALWAYS** create APIM in a separate folder (`apim/`) with its own state file, data sources for existing RG/Log Analytics, and dedicated deploy/destroy workflows (see "APIM Separation Pattern" below)
+6. **Apply security rules** — No secrets in code; use Key Vault; Managed Identities only; mark sensitive outputs (see `build-ais-platform.instructions.md`, "Security & Secrets")
+7. **Document via RUNBOOK** — Include `env/<env>/RUNBOOK.md` with deployment steps (see `build-ais-platform.instructions.md`, "Deployment Workflow")
 
 **For detailed standards**, refer to sections in `build-ais-platform.instructions.md`:
 - Module structure & code organization → "Terraform Code Standards"
@@ -38,12 +40,63 @@ This chat mode assists with building an Azure Integration Services platform usin
 - Security & secrets handling → "Security & Secrets"
 - Service-specific rules → "Service-Specific Implementation Rules"
 
+## APIM Separation Pattern
+
+**CRITICAL:** APIM must ALWAYS be deployed separately due to Azure provider issues with managed identity propagation causing 401 errors during state refresh.
+
+### Required Structure
+```
+project-name/
+├── env/dev/              # Main platform (all services EXCEPT APIM)
+│   ├── main.tf           # RG, Log Analytics, Storage, Service Bus, Functions, Logic Apps
+│   ├── backend.tfvars    # State: project-dev.tfstate
+│   └── ...
+├── apim/                 # Separate APIM deployment
+│   ├── main.tf           # Data sources for existing RG + Log Analytics, APIM module only
+│   ├── variables.tf
+│   ├── outputs.tf
+│   ├── backend.tfvars    # State: project-dev-apim.tfstate (separate!)
+│   ├── dev.tfvars
+│   └── README.md         # Explain separation rationale, deployment order
+└── .github/workflows/
+    ├── terraform-deploy.yml         # Deploys main platform
+    ├── terraform-destroy.yml        # Destroys main platform
+    ├── terraform-apim-deploy.yml    # Deploys APIM separately
+    └── terraform-apim-destroy.yml   # Destroys APIM separately
+```
+
+### Deployment Order
+1. **First:** Deploy main platform (`env/dev/`) → Creates RG, Log Analytics, all services except APIM
+2. **Second:** Deploy APIM (`apim/`) → Uses data sources to reference existing RG and Log Analytics
+
+### Key Implementation Details
+- APIM `main.tf` uses **data sources** (not resource creation) for RG and Log Analytics:
+  ```hcl
+  data "azurerm_resource_group" "existing" {
+    name = var.resource_group_name
+  }
+  data "azurerm_log_analytics_workspace" "existing" {
+    name                = var.log_analytics_workspace_name
+    resource_group_name = var.resource_group_name
+  }
+  ```
+- Separate state files prevent coupling
+- APIM workflows include 25-30 minute deployment warning
+- Both workflows require manual confirmation (`DEPLOY-APIM`, `DESTROY-APIM`)
+
+### Rationale
+Azure provider has a known bug where it attempts to read APIM delegation validation keys immediately after resource creation, but the managed identity hasn't propagated yet, causing persistent 401 errors. Separating APIM:
+- ✅ Main platform deploys quickly (5-10 min) without APIM blocking
+- ✅ APIM can be deployed independently after platform stabilizes
+- ✅ Faster iteration on platform changes
+- ✅ Independent lifecycle management
+
 ## Information Requests
 Always ask the operator for:
 - Azure subscription ID and target resource group
 - Environment (`dev`, `test`, `stg`, `prod`)
 - Azure region and availability needs
-- Required services (APIM, Logic Apps, Service Bus, Functions, Key Vault, Log Analytics, App Insights)
+- Required services (Note: APIM will be separated automatically; Logic Apps, Service Bus, Functions, Key Vault, Log Analytics, App Insights go in main platform)
 - Networking requirements (VNets, subnets, NSGs)
 - RBAC and security requirements
 - Cost optimization goals

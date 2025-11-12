@@ -1,36 +1,6 @@
 # Standalone APIM Deployment
 # This deploys APIM separately from the main platform to avoid deployment conflicts
 
-terraform {
-  required_version = ">= 1.5.0"
-
-  required_providers {
-    azurerm = {
-      source  = "hashicorp/azurerm"
-      version = "~> 4.0"
-    }
-  }
-
-  backend "azurerm" {
-    # Backend configuration to be provided via backend config file or CLI
-  }
-}
-
-provider "azurerm" {
-  features {
-    api_management {
-      purge_soft_delete_on_destroy = true
-      recover_soft_deleted         = true
-    }
-    key_vault {
-      purge_soft_delete_on_destroy = true
-    }
-    resource_group {
-      prevent_deletion_if_contains_resources = false
-    }
-  }
-}
-
 # Data source for existing resource group (created by main platform)
 data "azurerm_resource_group" "this" {
   name = var.resource_group_name
