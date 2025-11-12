@@ -213,10 +213,6 @@ module "logicapp_02" {
 }
 
 # API Management
-# Temporarily commented out due to APIM 401 errors during refresh
-# The APIM resource exists in Azure but causes Terraform refresh failures
-# Uncomment after the managed identity has fully propagated (15-30 min after creation)
-/*
 module "apim" {
   source = "../../modules/apim"
 
@@ -230,7 +226,6 @@ module "apim" {
 
   tags = local.common_tags
 }
-*/
 
 # RBAC Assignments for Service Bus
 resource "azurerm_role_assignment" "function_app_servicebus_sender" {
