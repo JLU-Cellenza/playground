@@ -19,14 +19,3 @@ resource "azurerm_storage_container" "containers" {
   storage_account_name  = azurerm_storage_account.this.name
   container_access_type = "private"
 }
-
-resource "azurerm_monitor_diagnostic_setting" "this" {
-  name                       = "diag-${var.storage_account_name}"
-  target_resource_id         = "${azurerm_storage_account.this.id}/blobServices/default/"
-  log_analytics_workspace_id = var.log_analytics_workspace_id
-
-  metric {
-    category = "Transaction"
-    enabled  = true
-  }
-}

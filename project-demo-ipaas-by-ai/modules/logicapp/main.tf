@@ -50,18 +50,3 @@ resource "azurerm_logic_app_standard" "this" {
     ]
   }
 }
-
-resource "azurerm_monitor_diagnostic_setting" "this" {
-  name                       = "diag-${var.logic_app_name}"
-  target_resource_id         = azurerm_logic_app_standard.this.id
-  log_analytics_workspace_id = var.log_analytics_workspace_id
-
-  enabled_log {
-    category = "WorkflowRuntime"
-  }
-
-  metric {
-    category = "AllMetrics"
-    enabled  = true
-  }
-}

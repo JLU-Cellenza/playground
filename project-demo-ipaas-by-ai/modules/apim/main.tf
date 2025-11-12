@@ -12,22 +12,3 @@ resource "azurerm_api_management" "this" {
 
   tags = var.tags
 }
-
-resource "azurerm_monitor_diagnostic_setting" "this" {
-  name                       = "diag-${var.apim_name}"
-  target_resource_id         = azurerm_api_management.this.id
-  log_analytics_workspace_id = var.log_analytics_workspace_id
-
-  enabled_log {
-    category = "GatewayLogs"
-  }
-
-  enabled_log {
-    category = "WebSocketConnectionLogs"
-  }
-
-  metric {
-    category = "AllMetrics"
-    enabled  = true
-  }
-}

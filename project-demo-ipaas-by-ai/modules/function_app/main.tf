@@ -40,18 +40,3 @@ resource "azurerm_linux_function_app" "this" {
 
   tags = var.tags
 }
-
-resource "azurerm_monitor_diagnostic_setting" "this" {
-  name                       = "diag-${var.function_app_name}"
-  target_resource_id         = azurerm_linux_function_app.this.id
-  log_analytics_workspace_id = var.log_analytics_workspace_id
-
-  enabled_log {
-    category = "FunctionAppLogs"
-  }
-
-  metric {
-    category = "AllMetrics"
-    enabled  = true
-  }
-}
