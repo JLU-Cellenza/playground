@@ -58,15 +58,15 @@ output "logicapp_02_url" {
 }
 
 # Temporarily commented out while APIM module is disabled
-# output "apim_gateway_url" {
-#   description = "API Management gateway URL"
-#   value       = module.apim.gateway_url
-# }
-#
-# output "apim_developer_portal_url" {
-#   description = "API Management developer portal URL"
-#   value       = module.apim.developer_portal_url
-# }
+output "apim_gateway_url" {
+  description = "API Management gateway URL"
+  value       = module.apim.gateway_url
+}
+
+output "apim_developer_portal_url" {
+  description = "API Management developer portal URL"
+  value       = module.apim.developer_portal_url
+}
 
 output "storage_platform_name" {
   description = "Platform storage account name"
