@@ -50,12 +50,20 @@ project-name/
 ├── env/dev/              # Main platform (all services EXCEPT APIM)
 │   ├── main.tf           # RG, Log Analytics, Storage, Service Bus, Functions, Logic Apps
 │   ├── backend.tfvars    # State: project-dev.tfstate
+│   │                     # Example: resource_group_name="rg-common-iac-01"
+│   │                     #          storage_account_name="stocommoniac01"
+│   │                     #          container_name="terraform"
+│   │                     #          key="project-dev.tfstate"
 │   └── ...
 ├── apim/                 # Separate APIM deployment
 │   ├── main.tf           # Data sources for existing RG + Log Analytics, APIM module only
 │   ├── variables.tf
 │   ├── outputs.tf
-│   ├── backend.tfvars    # State: project-dev-apim.tfstate (separate!)
+│   ├── backend.tfvars    # SAME storage account as env/dev/, different key!
+│   │                     # Example: resource_group_name="rg-common-iac-01"
+│   │                     #          storage_account_name="stocommoniac01"
+│   │                     #          container_name="terraform"
+│   │                     #          key="project-dev-apim.tfstate" ← Different!
 │   ├── dev.tfvars
 │   └── README.md         # Explain separation rationale, deployment order
 └── .github/workflows/
@@ -80,7 +88,8 @@ project-name/
     resource_group_name = var.resource_group_name
   }
   ```
-- Separate state files prevent coupling
+- **Backend configuration**: APIM `backend.tfvars` must use the **SAME** storage account as the main platform (`env/dev/backend.tfvars`), but with a different state file key (e.g., `project-dev-apim.tfstate` vs `project-dev.tfstate`)
+- Separate state files prevent coupling while using shared backend infrastructure
 - APIM workflows include 25-30 minute deployment warning
 - Both workflows require manual confirmation (`DEPLOY-APIM`, `DESTROY-APIM`)
 

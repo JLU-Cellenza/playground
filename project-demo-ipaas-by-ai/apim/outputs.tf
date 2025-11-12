@@ -10,10 +10,10 @@ output "apim_developer_portal_url" {
 
 output "apim_id" {
   description = "API Management resource ID"
-  value       = module.apim.id
+  value       = module.apim.apim_id
 }
 
 output "apim_principal_id" {
   description = "API Management managed identity principal ID"
-  value       = module.apim.principal_id
+  value       = module.apim.identity_principal_id
 }
