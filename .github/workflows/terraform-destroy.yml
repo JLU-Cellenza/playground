@@ -3,6 +3,14 @@ name: Terraform Destroy
 on:
   workflow_dispatch:
     inputs:
+      project:
+        description: 'Project to destroy'
+        required: true
+        default: 'project-demo-ipaas-by-ai'
+        type: choice
+        options:
+          - project-demo-ipaas-by-ai
+          - project-simple-ipaas
       environment:
         description: 'Environment to destroy (dev or prd)'
         required: true
@@ -18,13 +26,13 @@ on:
 
 jobs:
   destroy:
-    name: Destroy ${{ github.event.inputs.environment }}
+    name: Destroy ${{ github.event.inputs.project }} - ${{ github.event.inputs.environment }}
     runs-on: ubuntu-latest
     environment: ${{ github.event.inputs.environment }}
     
     defaults:
       run:
-        working-directory: project-demo-ipaas-by-ai/env/${{ github.event.inputs.environment }}
+        working-directory: ${{ github.event.inputs.project }}/env/${{ github.event.inputs.environment }}
     
     steps:
       - name: Checkout
@@ -82,14 +90,14 @@ jobs:
 
       - name: Display Destroy Plan
         run: |
-          echo "## 🔥 Terraform Destroy Plan for ${{ github.event.inputs.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "## 🔥 Terraform Destroy Plan for ${{ github.event.inputs.project }} - ${{ github.event.inputs.environment }}" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           cat destroy_plan.txt >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
 
       - name: Final Confirmation Check
         run: |
-          echo "⚠️ WARNING: About to destroy infrastructure in ${{ github.event.inputs.environment }} environment!"
+          echo "⚠️ WARNING: About to destroy infrastructure in ${{ github.event.inputs.project }} - ${{ github.event.inputs.environment }} environment!"
           echo "This action is IRREVERSIBLE and will delete all resources."
           sleep 5
 
