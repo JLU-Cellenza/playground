@@ -1,7 +1,7 @@
 # Backend configuration for APIM Terraform state
 # Separate from main platform state to allow independent deployments
 
-resource_group_name  = "rg-terraform-state"
-storage_account_name = "stterraformstate001"
-container_name       = "tfstate"
+resource_group_name  = "rg-common-iac-01"
+storage_account_name = "stocommoniac01"
+container_name       = "terraform"
 key                  = "mvp-ipaas-dev-apim.tfstate"
