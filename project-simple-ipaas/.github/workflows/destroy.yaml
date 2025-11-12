@@ -67,14 +67,18 @@ jobs:
           echo "TERRAFORM_DIR=./env/${ENV}" >> $GITHUB_ENV
           echo "TFVARS_FILE=${ENV}.tfvars" >> $GITHUB_ENV
 
+      - name: Prepare backend file
+        run: |
+          if [ -f "${{ env.TERRAFORM_DIR }}/backend.tfvars" ]; then
+            echo "backend.tfvars found"
+          else
+            echo "ERROR: backend.tfvars not found in ${{ env.TERRAFORM_DIR }}" && exit 1
+          fi
+
       - name: Terraform Init
         run: |
           cd ${{ env.TERRAFORM_DIR }}
-          terraform init \
-            -backend-config="resource_group_name=${{ secrets.TF_BACKEND_RESOURCE_GROUP }}" \
-            -backend-config="storage_account_name=${{ secrets.TF_BACKEND_STORAGE_ACCOUNT }}" \
-            -backend-config="container_name=${{ secrets.TF_BACKEND_CONTAINER }}" \
-            -backend-config="key=simple-ipaas-${{ env.ENVIRONMENT }}.tfstate"
+          terraform init -backend-config=backend.tfvars
 
       - name: Terraform Plan Destroy
         id: plan
