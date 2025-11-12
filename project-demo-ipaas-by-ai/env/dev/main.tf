@@ -255,17 +255,18 @@ resource "azurerm_role_assignment" "logicapp_01_servicebus_receiver" {
   principal_id         = module.logicapp_01.identity_principal_id
 }
 
-resource "azurerm_role_assignment" "logicapp_02_servicebus_sender" {
-  scope                = module.servicebus.namespace_id
-  role_definition_name = "Azure Service Bus Data Sender"
-  principal_id         = module.logicapp_02.identity_principal_id
-}
-
-resource "azurerm_role_assignment" "logicapp_02_servicebus_receiver" {
-  scope                = module.servicebus.namespace_id
-  role_definition_name = "Azure Service Bus Data Receiver"
-  principal_id         = module.logicapp_02.identity_principal_id
-}
+# Temporarily commented out along with Logic App 02
+# resource "azurerm_role_assignment" "logicapp_02_servicebus_sender" {
+#   scope                = module.servicebus.namespace_id
+#   role_definition_name = "Azure Service Bus Data Sender"
+#   principal_id         = module.logicapp_02.identity_principal_id
+# }
+#
+# resource "azurerm_role_assignment" "logicapp_02_servicebus_receiver" {
+#   scope                = module.servicebus.namespace_id
+#   role_definition_name = "Azure Service Bus Data Receiver"
+#   principal_id         = module.logicapp_02.identity_principal_id
+# }
 
 # RBAC Assignments for Storage (Platform)
 resource "azurerm_role_assignment" "function_app_storage_blob_contributor" {
@@ -280,8 +281,9 @@ resource "azurerm_role_assignment" "logicapp_01_storage_blob_contributor" {
   principal_id         = module.logicapp_01.identity_principal_id
 }
 
-resource "azurerm_role_assignment" "logicapp_02_storage_blob_contributor" {
-  scope                = module.storage_platform.id
-  role_definition_name = "Storage Blob Data Contributor"
-  principal_id         = module.logicapp_02.identity_principal_id
-}
+# Temporarily commented out along with Logic App 02
+# resource "azurerm_role_assignment" "logicapp_02_storage_blob_contributor" {
+#   scope                = module.storage_platform.id
+#   role_definition_name = "Storage Blob Data Contributor"
+#   principal_id         = module.logicapp_02.identity_principal_id
+# }
