@@ -1,0 +1,186 @@
+name: Destroy Infrastructure
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to destroy'
+        required: true
+        type: choice
+        options:
+          - dev
+          - prd
+      confirmation:
+        description: 'Type "destroy" to confirm infrastructure destruction'
+        required: true
+        type: string
+
+env:
+  TF_VERSION: '1.5.0'
+  ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+  ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+  ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+  ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+
+# Prevent concurrent operations
+concurrency:
+  group: terraform-destroy-${{ github.event.inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  validate-confirmation:
+    name: Validate Destruction Request
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Confirmation
+        run: |
+          if [ "${{ github.event.inputs.confirmation }}" != "destroy" ]; then
+            echo "❌ Confirmation failed. You must type 'destroy' to proceed."
+            exit 1
+          fi
+          echo "✅ Confirmation validated"
+
+  plan-destroy:
+    name: Plan Destruction for ${{ github.event.inputs.environment }}
+    runs-on: ubuntu-latest
+    needs: validate-confirmation
+    permissions:
+      contents: read
+      id-token: write
+
+    outputs:
+      plan-exitcode: ${{ steps.plan.outputs.exitcode }}
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Set Environment Variables
+        run: |
+          ENV="${{ github.event.inputs.environment }}"
+          echo "ENVIRONMENT=${ENV}" >> $GITHUB_ENV
+          echo "TERRAFORM_DIR=./env/${ENV}" >> $GITHUB_ENV
+          echo "TFVARS_FILE=${ENV}.tfvars" >> $GITHUB_ENV
+
+      - name: Terraform Init
+        run: |
+          cd ${{ env.TERRAFORM_DIR }}
+          terraform init \
+            -backend-config="resource_group_name=${{ secrets.TF_BACKEND_RESOURCE_GROUP }}" \
+            -backend-config="storage_account_name=${{ secrets.TF_BACKEND_STORAGE_ACCOUNT }}" \
+            -backend-config="container_name=${{ secrets.TF_BACKEND_CONTAINER }}" \
+            -backend-config="key=simple-ipaas-${{ env.ENVIRONMENT }}.tfstate"
+
+      - name: Terraform Plan Destroy
+        id: plan
+        run: |
+          cd ${{ env.TERRAFORM_DIR }}
+          terraform plan -destroy \
+            -var-file="${{ env.TFVARS_FILE }}" \
+            -out=destroy.tfplan \
+            -detailed-exitcode || exit_code=$?
+          
+          echo "exitcode=${exit_code:-0}" >> $GITHUB_OUTPUT
+          
+          # Exit code 0 = no resources to destroy, 1 = error, 2 = resources to destroy
+          if [ ${exit_code:-0} -eq 1 ]; then
+            exit 1
+          fi
+
+      - name: Save Destroy Plan
+        if: steps.plan.outputs.exitcode == '2'
+        uses: actions/upload-artifact@v4
+        with:
+          name: destroy-plan-${{ env.ENVIRONMENT }}
+          path: ${{ env.TERRAFORM_DIR }}/destroy.tfplan
+          retention-days: 7
+
+      - name: Create Destroy Summary
+        run: |
+          echo "### 🔥 Infrastructure Destruction Plan" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment:** ${{ env.ENVIRONMENT }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Requested by:** @${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Resources to destroy:** ${{ steps.plan.outputs.exitcode == '2' && 'Yes' || 'None found' }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "⚠️ **WARNING:** This action will permanently delete all infrastructure resources." >> $GITHUB_STEP_SUMMARY
+
+  approve-destroy:
+    name: Approve Destruction
+    runs-on: ubuntu-latest
+    needs: plan-destroy
+    if: needs.plan-destroy.outputs.plan-exitcode == '2'
+    environment:
+      name: ${{ github.event.inputs.environment }}-destroy
+    steps:
+      - name: Manual Approval Gate
+        run: |
+          echo "⏳ Waiting for manual approval to destroy ${{ github.event.inputs.environment }} environment..."
+          echo "This step requires approval from authorized personnel."
+
+  destroy:
+    name: Execute Destruction
+    runs-on: ubuntu-latest
+    needs: [plan-destroy, approve-destroy]
+    if: needs.plan-destroy.outputs.plan-exitcode == '2'
+    environment: ${{ github.event.inputs.environment }}
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Set Environment Variables
+        run: |
+          ENV="${{ github.event.inputs.environment }}"
+          echo "ENVIRONMENT=${ENV}" >> $GITHUB_ENV
+          echo "TERRAFORM_DIR=./env/${ENV}" >> $GITHUB_ENV
+
+      - name: Terraform Init
+        run: |
+          cd ${{ env.TERRAFORM_DIR }}
+          terraform init \
+            -backend-config="resource_group_name=${{ secrets.TF_BACKEND_RESOURCE_GROUP }}" \
+            -backend-config="storage_account_name=${{ secrets.TF_BACKEND_STORAGE_ACCOUNT }}" \
+            -backend-config="container_name=${{ secrets.TF_BACKEND_CONTAINER }}" \
+            -backend-config="key=simple-ipaas-${{ env.ENVIRONMENT }}.tfstate"
+
+      - name: Download Destroy Plan
+        uses: actions/download-artifact@v4
+        with:
+          name: destroy-plan-${{ env.ENVIRONMENT }}
+          path: ${{ env.TERRAFORM_DIR }}
+
+      - name: Terraform Destroy
+        id: destroy
+        run: |
+          cd ${{ env.TERRAFORM_DIR }}
+          terraform apply -auto-approve destroy.tfplan
+
+      - name: Destroy Summary
+        if: always()
+        run: |
+          if [ "${{ steps.destroy.outcome }}" == "success" ]; then
+            echo "### ✅ Infrastructure Destroyed Successfully" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Environment:** ${{ env.ENVIRONMENT }}" >> $GITHUB_STEP_SUMMARY
+            echo "**Destroyed by:** @${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+            echo "**Timestamp:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### ❌ Destruction Failed" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Environment:** ${{ env.ENVIRONMENT }}" >> $GITHUB_STEP_SUMMARY
+            echo "Please review the workflow logs for details." >> $GITHUB_STEP_SUMMARY
+          fi

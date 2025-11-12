@@ -1,0 +1,130 @@
+name: Deploy Infrastructure
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'env/**/*.tf'
+      - 'env/**/*.tfvars'
+      - 'modules/**/*.tf'
+      - '.github/workflows/deploy.yaml'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - prd
+
+env:
+  TF_VERSION: '1.5.0'
+  ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+  ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+  ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+  ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+
+# Prevent concurrent deployments to the same environment
+concurrency:
+  group: terraform-deploy-${{ github.event.inputs.environment || 'dev' }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to ${{ github.event.inputs.environment || 'dev' }}
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'dev' }}
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Set Environment Variables
+        id: set-env
+        run: |
+          ENV="${{ github.event.inputs.environment || 'dev' }}"
+          echo "ENVIRONMENT=${ENV}" >> $GITHUB_ENV
+          echo "TERRAFORM_DIR=./env/${ENV}" >> $GITHUB_ENV
+          echo "TFVARS_FILE=${ENV}.tfvars" >> $GITHUB_ENV
+
+      - name: Terraform Init
+        id: init
+        run: |
+          cd ${{ env.TERRAFORM_DIR }}
+          terraform init \
+            -backend-config="resource_group_name=${{ secrets.TF_BACKEND_RESOURCE_GROUP }}" \
+            -backend-config="storage_account_name=${{ secrets.TF_BACKEND_STORAGE_ACCOUNT }}" \
+            -backend-config="container_name=${{ secrets.TF_BACKEND_CONTAINER }}" \
+            -backend-config="key=simple-ipaas-${{ env.ENVIRONMENT }}.tfstate"
+
+      - name: Terraform Plan
+        id: plan
+        run: |
+          cd ${{ env.TERRAFORM_DIR }}
+          terraform plan \
+            -var-file="${{ env.TFVARS_FILE }}" \
+            -out=tfplan \
+            -detailed-exitcode || exit_code=$?
+          
+          # Exit code 0 = no changes, 1 = error, 2 = changes present
+          if [ ${exit_code:-0} -eq 1 ]; then
+            exit 1
+          elif [ ${exit_code:-0} -eq 2 ]; then
+            echo "changes_detected=true" >> $GITHUB_OUTPUT
+          else
+            echo "changes_detected=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Terraform Apply
+        id: apply
+        if: steps.plan.outputs.changes_detected == 'true'
+        run: |
+          cd ${{ env.TERRAFORM_DIR }}
+          terraform apply -auto-approve tfplan
+
+      - name: Terraform Output
+        id: output
+        if: steps.apply.outcome == 'success' || steps.apply.outcome == 'skipped'
+        run: |
+          cd ${{ env.TERRAFORM_DIR }}
+          terraform output -json > terraform-outputs.json
+          
+          echo "### Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment:** ${{ env.ENVIRONMENT }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Status:** ✅ Deployed" >> $GITHUB_STEP_SUMMARY
+          echo "**Changes:** ${{ steps.plan.outputs.changes_detected == 'true' && 'Applied' || 'None' }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "#### Infrastructure Outputs" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`json" >> $GITHUB_STEP_SUMMARY
+          cat terraform-outputs.json >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+      - name: Save Terraform Outputs
+        if: steps.output.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-outputs-${{ env.ENVIRONMENT }}-${{ github.run_number }}
+          path: ${{ env.TERRAFORM_DIR }}/terraform-outputs.json
+          retention-days: 90
+
+      - name: Deployment Failed
+        if: failure()
+        run: |
+          echo "### ❌ Deployment Failed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment:** ${{ env.ENVIRONMENT }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Failed Step:** ${{ steps.init.outcome == 'failure' && 'Init' || steps.plan.outcome == 'failure' && 'Plan' || 'Apply' }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Please review the workflow logs for details." >> $GITHUB_STEP_SUMMARY
