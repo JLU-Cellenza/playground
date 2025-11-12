@@ -208,7 +208,7 @@ module "logicapp_02" {
     module.storage_logicapp_02,
     module.app_insights,
     module.servicebus,
-    module.logicapp_01  # Create Logic App 02 after Logic App 01 to avoid simultaneous API calls
+    module.logicapp_01 # Create Logic App 02 after Logic App 01 to avoid simultaneous API calls
   ]
 }
 
