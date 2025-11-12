@@ -16,25 +16,11 @@ resource "azurerm_logic_app_standard" "this" {
   storage_account_name       = var.storage_account_name
   storage_account_access_key = var.storage_account_access_key
   version                    = "~4"
-  https_only                 = true
-  client_affinity_enabled    = false
 
-  app_settings = merge(
-    {
-      "FUNCTIONS_WORKER_RUNTIME"                       = "node"
-      "WEBSITE_NODE_DEFAULT_VERSION"                   = "~18"
-      "WEBSITE_RUN_FROM_PACKAGE"                       = "1"
-      "AzureWebJobsStorage"                            = var.storage_connection_string
-      "APPINSIGHTS_INSTRUMENTATIONKEY"                 = var.app_insights_instrumentation_key
-      "APPLICATIONINSIGHTS_CONNECTION_STRING"          = var.app_insights_connection_string
-      "SERVICEBUS_CONNECTION__fullyQualifiedNamespace" = var.servicebus_namespace_fqdn
-    },
-    var.additional_app_settings
-  )
-
-  site_config {
-    always_on = false
-    use_32_bit_worker_process = false
+  app_settings = {
+    "FUNCTIONS_WORKER_RUNTIME"     = "node"
+    "WEBSITE_NODE_DEFAULT_VERSION" = "~18"
+    "AzureWebJobsStorage"          = var.storage_connection_string
   }
 
   identity {
@@ -42,11 +28,4 @@ resource "azurerm_logic_app_standard" "this" {
   }
 
   tags = var.tags
-
-  lifecycle {
-    ignore_changes = [
-      app_settings["WEBSITE_CONTENTAZUREFILECONNECTIONSTRING"],
-      app_settings["WEBSITE_CONTENTSHARE"]
-    ]
-  }
 }
