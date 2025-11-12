@@ -45,18 +45,20 @@ variable "app_insights_connection_string" {
   description = "Application Insights connection string"
   type        = string
   sensitive   = true
+  default     = null
 }
 
 variable "app_insights_instrumentation_key" {
   description = "Application Insights instrumentation key"
   type        = string
   sensitive   = true
+  default     = null
 }
 
 variable "servicebus_namespace_fqdn" {
   description = "Service Bus namespace FQDN for managed identity connection"
   type        = string
-  default     = ""
+  default     = null
 }
 
 variable "additional_app_settings" {
@@ -68,6 +70,7 @@ variable "additional_app_settings" {
 variable "log_analytics_workspace_id" {
   description = "The ID of the Log Analytics Workspace for diagnostics"
   type        = string
+  default     = null
 }
 
 variable "tags" {
