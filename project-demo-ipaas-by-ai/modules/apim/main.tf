@@ -11,4 +11,14 @@ resource "azurerm_api_management" "this" {
   }
 
   tags = var.tags
+
+  # Workaround for transient 401 errors with APIM delegation validation
+  # This prevents unnecessary plan/refresh failures
+  lifecycle {
+    ignore_changes = [
+      # Ignore delegation validation related changes that cause 401 errors
+      tags
+    ]
+  }
 }
+
