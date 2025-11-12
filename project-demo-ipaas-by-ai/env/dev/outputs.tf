@@ -57,6 +57,8 @@ output "logicapp_02_url" {
   value       = "https://${module.logicapp_02.default_hostname}"
 }
 
+# APIM outputs disabled - module is commented out
+/*
 output "apim_gateway_url" {
   description = "API Management gateway URL"
   value       = module.apim.gateway_url
@@ -66,6 +68,7 @@ output "apim_developer_portal_url" {
   description = "API Management developer portal URL"
   value       = module.apim.developer_portal_url
 }
+*/
 
 output "storage_platform_name" {
   description = "Platform storage account name"

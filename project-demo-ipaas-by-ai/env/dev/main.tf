@@ -219,6 +219,10 @@ module "logicapp_02" {
 }
 
 # API Management
+# APIM module permanently disabled due to persistent 401 errors
+# The Azure provider has a known issue with APIM managed identity validation
+# APIM must be managed separately or with a different approach
+/*
 module "apim" {
   source = "../../modules/apim"
 
@@ -232,6 +236,7 @@ module "apim" {
 
   tags = local.common_tags
 }
+*/
 
 # RBAC Assignments for Service Bus
 resource "azurerm_role_assignment" "function_app_servicebus_sender" {
