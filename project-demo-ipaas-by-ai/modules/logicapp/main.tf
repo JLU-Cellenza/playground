@@ -16,6 +16,7 @@ resource "azurerm_logic_app_standard" "this" {
   storage_account_name       = var.storage_account_name
   storage_account_access_key = var.storage_account_access_key
   version                    = "~4"
+  https_only                 = false
 
   app_settings = {
     "FUNCTIONS_WORKER_RUNTIME"     = "node"

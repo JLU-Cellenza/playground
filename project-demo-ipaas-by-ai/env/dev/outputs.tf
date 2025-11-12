@@ -47,15 +47,16 @@ output "logicapp_01_url" {
   value       = "https://${module.logicapp_01.default_hostname}"
 }
 
-output "logicapp_02_name" {
-  description = "Logic App 02 name"
-  value       = module.logicapp_02.logic_app_name
-}
-
-output "logicapp_02_url" {
-  description = "Logic App 02 URL"
-  value       = "https://${module.logicapp_02.default_hostname}"
-}
+# Temporarily commented out while Logic App 02 module is disabled
+# output "logicapp_02_name" {
+#   description = "Logic App 02 name"
+#   value       = module.logicapp_02.logic_app_name
+# }
+#
+# output "logicapp_02_url" {
+#   description = "Logic App 02 URL"
+#   value       = "https://${module.logicapp_02.default_hostname}"
+# }
 
 # Temporarily commented out while APIM module is disabled
 # output "apim_gateway_url" {

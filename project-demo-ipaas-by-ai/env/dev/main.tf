@@ -97,19 +97,20 @@ module "storage_logicapp_01" {
 }
 
 # Storage Account for Logic Apps (Workflow 2)
-module "storage_logicapp_02" {
-  source = "../../modules/storage"
-
-  storage_account_name       = "stladev${var.project}02"
-  location                   = var.location
-  resource_group_name        = azurerm_resource_group.this.name
-  account_tier               = "Standard"
-  replication_type           = "LRS"
-  containers                 = []
-  log_analytics_workspace_id = module.log_analytics.workspace_id
-
-  tags = local.common_tags
-}
+# Temporarily commented out along with Logic App 02
+# module "storage_logicapp_02" {
+#   source = "../../modules/storage"
+#
+#   storage_account_name       = "stladev${var.project}02"
+#   location                   = var.location
+#   resource_group_name        = azurerm_resource_group.this.name
+#   account_tier               = "Standard"
+#   replication_type           = "LRS"
+#   containers                 = []
+#   log_analytics_workspace_id = module.log_analytics.workspace_id
+#
+#   tags = local.common_tags
+# }
 
 # Storage Account for Platform Configurations
 module "storage_platform" {
@@ -186,31 +187,32 @@ module "logicapp_01" {
 }
 
 # Logic App Standard 02 (Workflow 2)
-module "logicapp_02" {
-  source = "../../modules/logicapp"
-
-  logic_app_name                   = "loa-${var.environment}-${var.organization}-${var.project}-workflow-02"
-  service_plan_name                = "asp-${var.environment}-${var.organization}-${var.project}-loa-02"
-  location                         = var.location
-  resource_group_name              = azurerm_resource_group.this.name
-  sku_name                         = "WS1"
-  storage_account_name             = module.storage_logicapp_02.name
-  storage_account_access_key       = module.storage_logicapp_02.primary_access_key
-  storage_connection_string        = module.storage_logicapp_02.primary_connection_string
-  app_insights_connection_string   = module.app_insights.connection_string
-  app_insights_instrumentation_key = module.app_insights.instrumentation_key
-  servicebus_namespace_fqdn        = "${module.servicebus.namespace_name}.servicebus.windows.net"
-  log_analytics_workspace_id       = module.log_analytics.workspace_id
-
-  tags = local.common_tags
-
-  depends_on = [
-    module.storage_logicapp_02,
-    module.app_insights,
-    module.servicebus,
-    module.logicapp_01  # Create Logic App 02 after Logic App 01 to avoid simultaneous API calls
-  ]
-}
+# Temporarily commented out to simplify testing - deploy one Logic App at a time
+# module "logicapp_02" {
+#   source = "../../modules/logicapp"
+#
+#   logic_app_name                   = "loa-${var.environment}-${var.organization}-${var.project}-workflow-02"
+#   service_plan_name                = "asp-${var.environment}-${var.organization}-${var.project}-loa-02"
+#   location                         = var.location
+#   resource_group_name              = azurerm_resource_group.this.name
+#   sku_name                         = "WS1"
+#   storage_account_name             = module.storage_logicapp_02.name
+#   storage_account_access_key       = module.storage_logicapp_02.primary_access_key
+#   storage_connection_string        = module.storage_logicapp_02.primary_connection_string
+#   app_insights_connection_string   = module.app_insights.connection_string
+#   app_insights_instrumentation_key = module.app_insights.instrumentation_key
+#   servicebus_namespace_fqdn        = "${module.servicebus.namespace_name}.servicebus.windows.net"
+#   log_analytics_workspace_id       = module.log_analytics.workspace_id
+#
+#   tags = local.common_tags
+#
+#   depends_on = [
+#     module.storage_logicapp_02,
+#     module.app_insights,
+#     module.servicebus,
+#     module.logicapp_01  # Create Logic App 02 after Logic App 01 to avoid simultaneous API calls
+#   ]
+# }
 
 # API Management
 # Temporarily commented out to speed up testing - APIM takes 25+ minutes to deploy
