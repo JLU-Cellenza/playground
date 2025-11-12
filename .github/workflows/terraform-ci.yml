@@ -15,14 +15,6 @@ on:
       - '.github/workflows/terraform-ci.yml'
   workflow_dispatch:
     inputs:
-      project:
-        description: 'Project to run CI on'
-        required: true
-        default: 'project-demo-ipaas-by-ai'
-        type: choice
-        options:
-          - project-demo-ipaas-by-ai
-          - project-simple-ipaas
       environment:
         description: 'Environment to run (dev or prd)'
         required: true
@@ -38,12 +30,12 @@ on:
 
 jobs:
   terraform:
-    name: Terraform CI - ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.project || 'project-demo-ipaas-by-ai' }} - ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || 'dev' }}
+    name: Terraform CI - ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || 'dev' }}
     runs-on: ubuntu-latest
 
     defaults:
       run:
-        working-directory: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.project || 'project-demo-ipaas-by-ai' }}/env/${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || 'dev' }}
+        working-directory: project-demo-ipaas-by-ai/env/${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || 'dev' }}
 
     steps:
       - name: Checkout repository
