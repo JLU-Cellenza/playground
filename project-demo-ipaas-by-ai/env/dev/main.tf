@@ -21,6 +21,12 @@ terraform {
 
 provider "azurerm" {
   features {
+    api_management {
+      # Workaround for APIM 401 errors during state refresh
+      # Prevents validation key retrieval that causes failures
+      purge_soft_delete_on_destroy = true
+      recover_soft_deleted         = true
+    }
     key_vault {
       purge_soft_delete_on_destroy = true
     }
