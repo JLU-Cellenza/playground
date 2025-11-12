@@ -6,15 +6,20 @@ This Terraform configuration deploys a complete Azure Integration Platform as a 
 
 ### Architecture Components
 
+**Main Platform (`env/dev/`):**
 - **2x Logic App Standard** - Workflow orchestration
 - **1x Service Bus Namespace** - Central message box with "inbound" queue
-- **1x API Management (Developer)** - API gateway
 - **1x Function App (Consumption)** - Custom connectors and helpers
 - **1x Storage Account** - Platform configuration storage
 - **1x Log Analytics Workspace** - Centralized logging
 - **1x Application Insights** - Application monitoring
 
+**Separate APIM Deployment (`apim/`):**
+- **1x API Management (Developer)** - API gateway (deployed separately due to managed identity propagation timing)
+
 All services are configured with public access for demo purposes and connected to centralized logging.
+
+> **Note:** APIM is deployed separately to avoid Azure provider issues with managed identity propagation. See [apim/README.md](apim/README.md) for details.
 
 ## Prerequisites
 

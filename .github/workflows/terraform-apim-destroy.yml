@@ -1,0 +1,119 @@
+name: Destroy APIM
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to destroy (dev or prd)'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - prd
+      confirm:
+        description: 'Type DESTROY-APIM to confirm (this is irreversible!)'
+        required: true
+        default: 'NO'
+
+jobs:
+  destroy-apim:
+    name: Destroy APIM - ${{ github.event.inputs.environment }}
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+    
+    defaults:
+      run:
+        working-directory: project-demo-ipaas-by-ai/apim
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate Confirmation
+        run: |
+          if [ "${{ github.event.inputs.confirm }}" != "DESTROY-APIM" ]; then
+            echo "::error::Destroy not confirmed. You must type 'DESTROY-APIM' to proceed."
+            exit 1
+          fi
+
+      - name: Check Destroy Secret
+        run: |
+          if [ "${{ secrets.TERRAFORM_DESTROY }}" != "true" ]; then
+            echo "::error::TERRAFORM_DESTROY secret is not set to 'true'. Destroy blocked for safety."
+            exit 1
+          fi
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.5.0'
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Get Azure Subscription ID
+        id: subscription
+        run: |
+          SUBSCRIPTION_ID=$(az account show --query id -o tsv)
+          echo "subscription_id=$SUBSCRIPTION_ID" >> $GITHUB_OUTPUT
+          echo "Subscription ID: $SUBSCRIPTION_ID"
+
+      - name: Terraform Init
+        env:
+          ARM_SUBSCRIPTION_ID: ${{ steps.subscription.outputs.subscription_id }}
+          ARM_CLIENT_ID: ${{ fromJson(secrets.AZURE_CREDENTIALS).clientId }}
+          ARM_CLIENT_SECRET: ${{ fromJson(secrets.AZURE_CREDENTIALS).clientSecret }}
+          ARM_TENANT_ID: ${{ fromJson(secrets.AZURE_CREDENTIALS).tenantId }}
+        run: terraform init -backend-config=backend.tfvars
+
+      - name: Terraform Plan Destroy
+        id: plan
+        env:
+          ARM_SUBSCRIPTION_ID: ${{ steps.subscription.outputs.subscription_id }}
+          ARM_CLIENT_ID: ${{ fromJson(secrets.AZURE_CREDENTIALS).clientId }}
+          ARM_CLIENT_SECRET: ${{ fromJson(secrets.AZURE_CREDENTIALS).clientSecret }}
+          ARM_TENANT_ID: ${{ fromJson(secrets.AZURE_CREDENTIALS).tenantId }}
+        run: |
+          terraform plan -destroy -var-file=${{ github.event.inputs.environment }}.tfvars -out=destroy.tfplan
+          terraform show -no-color destroy.tfplan > destroy_plan.txt
+
+      - name: Display Destroy Plan
+        run: |
+          echo "## 🔥 APIM Destroy Plan for ${{ github.event.inputs.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          cat destroy_plan.txt >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+      - name: Final Confirmation Check
+        run: |
+          echo "⚠️ WARNING: About to destroy APIM in ${{ github.event.inputs.environment }} environment!"
+          echo "This action is IRREVERSIBLE and will delete the API Management service."
+          echo "APIM destruction takes 3-5 minutes."
+          sleep 5
+
+      - name: Terraform Destroy
+        env:
+          ARM_SUBSCRIPTION_ID: ${{ steps.subscription.outputs.subscription_id }}
+          ARM_CLIENT_ID: ${{ fromJson(secrets.AZURE_CREDENTIALS).clientId }}
+          ARM_CLIENT_SECRET: ${{ fromJson(secrets.AZURE_CREDENTIALS).clientSecret }}
+          ARM_TENANT_ID: ${{ fromJson(secrets.AZURE_CREDENTIALS).tenantId }}
+        run: terraform apply -auto-approve destroy.tfplan
+
+      - name: Destroy Summary
+        if: always()
+        run: |
+          echo "## 🔥 APIM Destroy Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment:** ${{ github.event.inputs.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Triggered by:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Time:** $(date -u)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "✅ APIM has been destroyed successfully." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Destroy failed. APIM may still exist. Please check manually." >> $GITHUB_STEP_SUMMARY
+          fi
