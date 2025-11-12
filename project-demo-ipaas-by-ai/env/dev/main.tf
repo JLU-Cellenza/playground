@@ -213,19 +213,20 @@ module "logicapp_02" {
 }
 
 # API Management
-module "apim" {
-  source = "../../modules/apim"
-
-  apim_name                  = "apim-${var.environment}-${var.organization}-${var.project}-01"
-  location                   = var.location
-  resource_group_name        = azurerm_resource_group.this.name
-  publisher_name             = var.apim_publisher_name
-  publisher_email            = var.apim_publisher_email
-  sku_name                   = "Developer_1"
-  log_analytics_workspace_id = module.log_analytics.workspace_id
-
-  tags = local.common_tags
-}
+# Temporarily commented out to speed up testing - APIM takes 25+ minutes to deploy
+# module "apim" {
+#   source = "../../modules/apim"
+#
+#   apim_name                  = "apim-${var.environment}-${var.organization}-${var.project}-01"
+#   location                   = var.location
+#   resource_group_name        = azurerm_resource_group.this.name
+#   publisher_name             = var.apim_publisher_name
+#   publisher_email            = var.apim_publisher_email
+#   sku_name                   = "Developer_1"
+#   log_analytics_workspace_id = module.log_analytics.workspace_id
+#
+#   tags = local.common_tags
+# }
 
 # RBAC Assignments for Service Bus
 resource "azurerm_role_assignment" "function_app_servicebus_sender" {
