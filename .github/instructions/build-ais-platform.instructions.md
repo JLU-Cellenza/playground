@@ -117,6 +117,69 @@ ais-platform-terraform/
 
 ## Service-Specific Implementation Rules
 
+**CRITICAL: Azure Provider Version**
+- **MUST use Azure provider `~> 4.0`** for Logic Apps Standard compatibility
+- Provider v4.x is required for `azurerm_logic_app_standard` with proper monitoring integration
+- Pin version in all `terraform.tf` or `versions.tf` files: `version = "~> 4.0"`
+
+**CRITICAL: APIM Separation**
+- **APIM must ALWAYS be deployed in a separate Terraform configuration** (`apim/` folder)
+- Main platform (`env/dev/`) includes all services EXCEPT APIM
+- APIM deployment uses data sources to reference existing RG and Log Analytics
+- Use same backend storage account but different state file keys (e.g., `project-dev.tfstate` vs `project-dev-apim.tfstate`)
+- Create dedicated GitHub workflows: `terraform-apim-deploy.yml` and `terraform-apim-destroy.yml`
+- Rationale: Azure provider bug causes 401 errors when reading APIM delegation validation keys immediately after creation due to managed identity propagation delays (15-30 minutes)
+
+**APIM Deployment Structure:**
+```
+project/
+├── env/dev/
+│   ├── main.tf          # All services EXCEPT APIM
+│   ├── backend.tfvars   # key = "project-dev.tfstate"
+│   └── ...
+├── apim/
+│   ├── main.tf          # Data sources + APIM module only
+│   ├── terraform.tf     # Provider config (separate from main platform)
+│   ├── backend.tfvars   # SAME storage account, key = "project-dev-apim.tfstate"
+│   ├── dev.tfvars       # References existing RG and Log Analytics names
+│   └── README.md        # Deployment order, troubleshooting
+└── .github/workflows/
+    ├── terraform-apim-deploy.yml    # Manual trigger, 25-30 min warning
+    └── terraform-apim-destroy.yml   # Manual trigger, DESTROY-APIM confirmation
+```
+
+**APIM main.tf Pattern:**
+```hcl
+# Data sources for existing resources (created by main platform)
+data "azurerm_resource_group" "this" {
+  name = var.resource_group_name
+}
+
+data "azurerm_log_analytics_workspace" "this" {
+  name                = var.log_analytics_workspace_name
+  resource_group_name = var.resource_group_name
+}
+
+# APIM module
+module "apim" {
+  source = "../modules/apim"
+
+  apim_name                  = var.apim_name
+  location                   = data.azurerm_resource_group.this.location
+  resource_group_name        = data.azurerm_resource_group.this.name
+  publisher_name             = var.apim_publisher_name
+  publisher_email            = var.apim_publisher_email
+  sku_name                   = var.apim_sku
+  log_analytics_workspace_id = data.azurerm_log_analytics_workspace.this.id
+
+  tags = var.tags
+}
+```
+
+**Deployment Order:**
+1. Deploy main platform first → creates RG, Log Analytics, all services except APIM (5-10 minutes)
+2. Deploy APIM separately → uses data sources to reference existing resources (25-30 minutes)
+
 **Universal Module Pattern:** All services follow this structure:
 - `main.tf`, `variables.tf` (with `type`/`description`), `outputs.tf`, `README.md`
 - Parameterize all inputs; never hardcode
@@ -130,7 +193,7 @@ ais-platform-terraform/
 |---------|---------|---------------|-------------|---------------------------|
 | **Service Bus** | Async messaging hub | `sku` (Standard/Premium), `central_queue_name`, `max_delivery_count`, `lock_duration` | `namespace_id`, `primary_connection_string` (*sensitive*) | Functions/Logic Apps need "Service Bus Data Sender" role |
 | **APIM** | API gateway, rate limiting | `sku`, `publisher_name`, `publisher_email` | `gateway_url`, `developer_portal_url` | Connects to backend services; diagnostic logs → Log Analytics |
-| **Logic Apps** | Workflow orchestration | `enabled`, `integration_account_id` | `workflow_id`, `workflow_url` | Use Managed Identity for connectors; trigger from Service Bus/Event Hubs |
+| **Logic Apps** | Workflow orchestration | `sku_name` (WS1/WS2/WS3), `storage_account_name`, `storage_account_access_key`, `version = "~4"` | `workflow_id`, `identity_principal_id`, `default_hostname` | **CRITICAL:** Use provider v4.x; set `version = "~4"`; do NOT set `AzureWebJobsStorage` in app_settings (auto-configured); configure App Insights via `app_settings`; use System Assigned MI |
 | **Functions** | Serverless compute | `plan_sku` (Consumption/Premium), `storage_account_tier` | `identity_principal_id`, `function_app_name` | Requires Storage Account; RBAC roles for Service Bus/Storage |
 | **Key Vault** | Secrets management | `soft_delete`, `purge_protection`, `sku` | `vault_uri` | All services read secrets via MI; connection strings stored here |
 | **Log Analytics** | Centralized logging | `retention_in_days`, `sku` | `workspace_id`, `workspace_customer_id` | Diagnostic settings from all services |
@@ -154,6 +217,106 @@ ais-platform-terraform/
 | Multi-tenancy | AIS 7 + Cosmos DB (multi-partition) + APIM (rate limiting) | Isolated data, API versioning |
 
 **Adding New Services:** Follow universal module pattern → parameterize → expose outputs → document dependencies → update `env/<env>/main.tf` → add RBAC → update `RUNBOOK.md`
+
+## Logic Apps Standard - Critical Implementation Details
+
+**Provider Version Requirement:**
+```hcl
+# terraform.tf or versions.tf
+terraform {
+  required_providers {
+    azurerm = {
+      source  = "hashicorp/azurerm"
+      version = "~> 4.0"  # REQUIRED for Logic Apps Standard
+    }
+  }
+}
+```
+
+**Resource Configuration:**
+```hcl
+resource "azurerm_logic_app_standard" "this" {
+  name                       = var.logic_app_name
+  location                   = var.location
+  resource_group_name        = var.resource_group_name
+  app_service_plan_id        = azurerm_service_plan.this.id
+  storage_account_name       = var.storage_account_name
+  storage_account_access_key = var.storage_account_access_key
+  version                    = "~4"  # Runtime version
+  https_only                 = false
+
+  app_settings = {
+    "FUNCTIONS_WORKER_RUNTIME"               = "node"
+    "WEBSITE_NODE_DEFAULT_VERSION"           = "~18"
+    # Monitoring (App Insights)
+    "APPINSIGHTS_INSTRUMENTATIONKEY"         = var.app_insights_instrumentation_key
+    "APPLICATIONINSIGHTS_CONNECTION_STRING"  = var.app_insights_connection_string
+    # Service Bus (for managed identity authentication)
+    "SERVICEBUS_NAMESPACE_FQDN"              = var.servicebus_namespace_fqdn
+    # DO NOT SET AzureWebJobsStorage - automatically configured via storage_account_name/access_key
+  }
+
+  identity {
+    type = "SystemAssigned"  # Required for RBAC-based access to Service Bus, Storage, etc.
+  }
+
+  tags = var.tags
+}
+```
+
+**Key Configuration Rules:**
+1. **Never set `AzureWebJobsStorage` in `app_settings`** — automatically configured when `storage_account_name` and `storage_account_access_key` are provided
+2. **Always use `version = "~4"`** — specifies Logic Apps runtime version
+3. **Enable System Assigned Managed Identity** — required for RBAC-based access to Service Bus, Storage, Key Vault
+4. **App Insights integration** — use both `APPINSIGHTS_INSTRUMENTATIONKEY` and `APPLICATIONINSIGHTS_CONNECTION_STRING` for full monitoring
+5. **Service Bus FQDN** — use `SERVICEBUS_NAMESPACE_FQDN` for managed identity authentication (not connection strings)
+
+**Common Mistakes to Avoid:**
+- ❌ Setting `AzureWebJobsStorage` manually → causes deployment conflicts
+- ❌ Using provider v3.x → missing Logic Apps Standard features and monitoring integration
+- ❌ Hardcoding connection strings → use managed identities with RBAC instead
+- ❌ Missing App Insights configuration → no monitoring/telemetry
+- ❌ Not configuring diagnostic settings → logs not sent to Log Analytics
+
+**RBAC Assignments Required:**
+```hcl
+# Service Bus access
+resource "azurerm_role_assignment" "logicapp_servicebus_sender" {
+  scope                = module.servicebus.namespace_id
+  role_definition_name = "Azure Service Bus Data Sender"
+  principal_id         = module.logicapp.identity_principal_id
+}
+
+resource "azurerm_role_assignment" "logicapp_servicebus_receiver" {
+  scope                = module.servicebus.namespace_id
+  role_definition_name = "Azure Service Bus Data Receiver"
+  principal_id         = module.logicapp.identity_principal_id
+}
+
+# Storage access (for platform storage, not Logic App storage)
+resource "azurerm_role_assignment" "logicapp_storage_blob_contributor" {
+  scope                = module.storage_platform.id
+  role_definition_name = "Storage Blob Data Contributor"
+  principal_id         = module.logicapp.identity_principal_id
+}
+```
+
+**Diagnostic Settings:**
+```hcl
+resource "azurerm_monitor_diagnostic_setting" "logicapp" {
+  name                       = "diag-${var.logic_app_name}"
+  target_resource_id         = azurerm_logic_app_standard.this.id
+  log_analytics_workspace_id = var.log_analytics_workspace_id
+
+  enabled_log {
+    category = "WorkflowRuntime"
+  }
+
+  metric {
+    category = "AllMetrics"
+  }
+}
+```
 
 ## CI/CD, Validation & Testing
 

@@ -40,6 +40,52 @@ This chat mode assists with building an Azure Integration Services platform usin
 - Security & secrets handling → "Security & Secrets"
 - Service-specific rules → "Service-Specific Implementation Rules"
 
+## Critical Terraform Best Practices
+
+### Azure Provider Version
+**MUST use Azure provider `~> 4.0`** for Logic Apps Standard compatibility:
+```hcl
+terraform {
+  required_providers {
+    azurerm = {
+      source  = "hashicorp/azurerm"
+      version = "~> 4.0"  # REQUIRED for Logic Apps Standard
+    }
+  }
+}
+```
+
+### Logic Apps Standard Configuration
+**Key rules for Logic Apps Standard:**
+1. **Never set `AzureWebJobsStorage` in `app_settings`** — automatically configured by `storage_account_name` and `storage_account_access_key` parameters
+2. **Always use `version = "~4"`** for Logic Apps runtime version
+3. **Enable System Assigned Managed Identity** for RBAC-based access
+4. **Configure App Insights** via `APPINSIGHTS_INSTRUMENTATIONKEY` and `APPLICATIONINSIGHTS_CONNECTION_STRING`
+5. **Use `SERVICEBUS_NAMESPACE_FQDN`** instead of connection strings for Service Bus access
+
+**Example:**
+```hcl
+resource "azurerm_logic_app_standard" "this" {
+  name                       = var.logic_app_name
+  storage_account_name       = var.storage_account_name
+  storage_account_access_key = var.storage_account_access_key
+  version                    = "~4"
+  
+  app_settings = {
+    "FUNCTIONS_WORKER_RUNTIME"              = "node"
+    "WEBSITE_NODE_DEFAULT_VERSION"          = "~18"
+    "APPINSIGHTS_INSTRUMENTATIONKEY"        = var.app_insights_instrumentation_key
+    "APPLICATIONINSIGHTS_CONNECTION_STRING" = var.app_insights_connection_string
+    "SERVICEBUS_NAMESPACE_FQDN"             = var.servicebus_namespace_fqdn
+    # DO NOT set AzureWebJobsStorage!
+  }
+  
+  identity {
+    type = "SystemAssigned"
+  }
+}
+```
+
 ## APIM Separation Pattern
 
 **CRITICAL:** APIM must ALWAYS be deployed separately due to Azure provider issues with managed identity propagation causing 401 errors during state refresh.
