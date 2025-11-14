@@ -3,6 +3,13 @@ name: Terraform Deploy
 on:
   workflow_dispatch:
     inputs:
+      project_name:
+        description: 'Project to deploy'
+        required: true
+        type: choice
+        options:
+          - project-simple-ipaas
+          - project-demo-ipaas-by-ai
       environment:
         description: 'Environment to deploy (dev or prd)'
         required: true
@@ -18,17 +25,25 @@ on:
 
 jobs:
   apply:
-    name: Deploy to ${{ github.event.inputs.environment }}
+    name: Deploy ${{ github.event.inputs.project_name }} to ${{ github.event.inputs.environment }}
     runs-on: ubuntu-latest
     environment: ${{ github.event.inputs.environment }}
     
     defaults:
       run:
-        working-directory: project-demo-ipaas-by-ai/env/${{ github.event.inputs.environment }}
+        working-directory: ${{ github.event.inputs.project_name }}/env/${{ github.event.inputs.environment }}
     
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Validate Project Directory
+        run: |
+          if [ ! -d "$GITHUB_WORKSPACE/${{ github.event.inputs.project_name }}/env/${{ github.event.inputs.environment }}" ]; then
+            echo "::error::Project directory ${{ github.event.inputs.project_name }}/env/${{ github.event.inputs.environment }} does not exist"
+            exit 1
+          fi
+          echo "✅ Project directory validated: ${{ github.event.inputs.project_name }}/env/${{ github.event.inputs.environment }}"
 
       - name: Validate Confirmation
         run: |

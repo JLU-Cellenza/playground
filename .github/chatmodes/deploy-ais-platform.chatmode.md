@@ -4,43 +4,124 @@
 Automate GitHub Actions workflow generation for Terraform-based AIS platform projects.
 
 ## Activation
-Ask: **"Set up CI/CD workflows for [project-path]"**
 
-When activating, the assistant will prompt for Terraform backend details (resource group, storage account, container, key). Example: `"Set up CI/CD workflows for c:\Workspace\playground\project-simple-ipaas"`
+**MANDATORY PROJECT NAME PARAMETER REQUIRED**
+
+Ask: **"Set up CI/CD workflows for project: [PROJECT_NAME]"**
+
+The `PROJECT_NAME` parameter is **mandatory** and must be explicitly provided. The assistant will not proceed without it.
+
+Examples:
+- ✅ `"Set up CI/CD workflows for project: project-simple-ipaas"`
+- ✅ `"Set up CI/CD workflows for project: project-demo-ipaas-by-ai"`
+- ❌ `"Set up CI/CD workflows"` (INVALID - project name missing)
+
+When activating with a valid project name, the assistant will:
+1. Validate the project exists in the workspace
+2. Prompt for Terraform backend details (resource group, storage account, container, key)
+3. Generate workflows that accept the project name as an input parameter
 
 ---
 
 ## What I Generate
 
+**IMPORTANT**: All workflow files are created in **`.github/workflows/`** at the **repository root**, NOT inside project directories.
+
+All workflows accept **project name as a mandatory input parameter** using GitHub Actions `workflow_dispatch` input.
+
 ### 1. `terraform-ci.yaml` - PR Validation
-- Runs on: Pull requests
+- **Location**: `.github/workflows/terraform-ci.yaml` (repo root)
+- Runs on: Pull requests OR Manual trigger (`workflow_dispatch`)
+- Input: `project_name` (dropdown, required - must select from available projects)
 - Actions: `fmt`, `validate`, `plan`, security scan (TFLint/Checkov)
+- Working directory: `./${{ inputs.project_name }}/env/${{ inputs.environment }}/`
 - Output: Plan artifact for review
 
 Note: Generated workflows will include a step to create a `backend.tfvars` file on the runner from provided backend details so the workflows call `terraform init -backend-config=backend.tfvars`.
 
 ### 2. `deploy.yaml` - Infrastructure Deployment
-- Runs on: Push to `main`/`master`
+- **Location**: `.github/workflows/deploy.yaml` (repo root)
+- Runs on: Manual trigger (`workflow_dispatch`) ONLY
+- Input: 
+  - `project_name` (dropdown, required - must select from available projects)
+  - `environment` (dropdown, required - dev/staging/prod)
 - Actions: `init`, `plan`, `apply`
+- Working directory: `./${{ inputs.project_name }}/env/${{ inputs.environment }}/`
 - Output: Deployed resources, configuration
 
 ### 3. `destroy.yaml` - Infrastructure Teardown
-- Runs on: Manual trigger (`workflow_dispatch`)
+- **Location**: `.github/workflows/destroy.yaml` (repo root)
+- Runs on: Manual trigger (`workflow_dispatch`) ONLY
+- Input: 
+  - `project_name` (dropdown, required - must select from available projects)
+  - `environment` (dropdown, required - dev/staging/prod)
 - Actions: `plan -destroy`, manual approval, `destroy`
+- Working directory: `./${{ inputs.project_name }}/env/${{ inputs.environment }}/`
 - Output: Destruction confirmation
+
+---
+
+### APIM-Specific Workflows (if APIM detected)
+
+If the project contains an `apim/` directory, **additional APIM-specific workflows** will be generated:
+
+### 4. `apim-ci.yaml` - APIM PR Validation
+- **Location**: `.github/workflows/apim-ci.yaml` (repo root)
+- Runs on: Pull requests OR Manual trigger (`workflow_dispatch`)
+- Input: `project_name` (dropdown, required - filtered to projects with APIM)
+- Actions: `fmt`, `validate`, `plan` for APIM configuration
+- Working directory: `./${{ inputs.project_name }}/apim/`
+- Output: APIM plan artifact for review
+
+### 5. `apim-deploy.yaml` - APIM Deployment
+- **Location**: `.github/workflows/apim-deploy.yaml` (repo root)
+- Runs on: Manual trigger (`workflow_dispatch`) ONLY
+- Input: 
+  - `project_name` (dropdown, required - filtered to projects with APIM)
+  - `environment` (dropdown, required - dev/staging/prod)
+- Actions: `init`, `plan`, `apply` for APIM
+- Working directory: `./${{ inputs.project_name }}/apim/`
+- Output: Deployed APIM resources, configuration
+
+### 6. `apim-destroy.yaml` - APIM Teardown
+- **Location**: `.github/workflows/apim-destroy.yaml` (repo root)
+- Runs on: Manual trigger (`workflow_dispatch`) ONLY
+- Input: 
+  - `project_name` (dropdown, required - filtered to projects with APIM)
+  - `environment` (dropdown, required - dev/staging/prod)
+- Actions: `plan -destroy`, manual approval, `destroy` for APIM
+- Working directory: `./${{ inputs.project_name }}/apim/`
+- Output: APIM destruction confirmation
+
+**Key Design**: Single set of workflows at repo root serve ALL projects by accepting project name at runtime. APIM workflows are generated only if APIM module is detected in the project.
 
 ---
 
 ## What I Analyze
 
-From your project, I will detect:
-- **Modules**: All modules in `modules/` directory
-- **Environments**: Configurations in `env/dev/`, `env/staging/`, `env/prod/`
-- **Backend**: State storage configuration from `backend.tfvars`
+From your **selected project**, I will detect:
+- **Project Name**: Validated against workspace projects
+- **Project Structure**: Check for APIM directory (`{PROJECT_NAME}/apim/`) to determine if APIM workflows are needed
+- **Modules**: All modules in `{PROJECT_NAME}/modules/` directory
+- **Environments**: Configurations in `{PROJECT_NAME}/env/dev/`, `{PROJECT_NAME}/env/staging/`, `{PROJECT_NAME}/env/prod/`
+- **APIM Configuration**: If `{PROJECT_NAME}/apim/` exists, analyze APIM-specific Terraform files
+- **Backend**: State storage configuration from `{PROJECT_NAME}/env/{environment}/backend.tfvars` (and `{PROJECT_NAME}/apim/backend.tfvars` if APIM exists)
 
 If a `backend.tfvars` is not present, the assistant will prompt for these values and embed a runner step that creates the `backend.tfvars` from repository secrets or inline values (prefer secrets for safety).
 - **Cloud Provider**: Azure, AWS, or GCP based on resources
-- **Naming Patterns**: Resource naming conventions from `locals.tf`
+- **Naming Patterns**: Resource naming conventions from `{PROJECT_NAME}/env/{environment}/locals.tf`
+
+---
+
+## Available Projects
+
+The following projects are available in this workspace:
+- `project-simple-ipaas` (Standard AIS platform - no APIM)
+- `project-demo-ipaas-by-ai` (Full AIS platform - includes APIM)
+
+**Note**: You must specify one of these project names when setting up CI/CD workflows.
+
+**APIM Detection**: Projects with an `apim/` directory will automatically trigger generation of 3 additional APIM-specific workflows.
 
 ---
 
@@ -80,30 +161,66 @@ Additionally the assistant may request these secrets to be set so the workflow c
 
 ```
 .github/
-└── workflows/
-    ├── terraform-ci.yaml      # Validation on PRs
-    ├── deploy.yaml            # Deploy on merge to main
-    └── destroy.yaml           # Manual teardown
+└── workflows/                          # ← WORKFLOWS AT REPO ROOT
+    ├── terraform-ci.yaml              # Validation (accepts project_name input)
+    ├── deploy.yaml                    # Deploy (accepts project_name + environment inputs)
+    ├── destroy.yaml                   # Teardown (accepts project_name + environment inputs)
+    ├── apim-ci.yaml                   # APIM Validation (generated only if APIM detected)
+    ├── apim-deploy.yaml               # APIM Deploy (generated only if APIM detected)
+    └── apim-destroy.yaml              # APIM Teardown (generated only if APIM detected)
+
+project-simple-ipaas/                   # ← PROJECT WITHOUT APIM (3 workflows only)
+└── env/
+    ├── dev/
+    │   ├── main.tf
+    │   ├── backend.tfvars
+    │   └── ...
+    └── prod/
+        └── ...
+
+project-demo-ipaas-by-ai/              # ← PROJECT WITH APIM (6 workflows total)
+├── env/
+│   └── dev/
+│       └── ...
+└── apim/                              # ← APIM detected = 3 extra workflows generated
+    ├── main.tf
+    ├── backend.tfvars
+    └── ...
 ```
+
+**Architecture**: One centralized workflow set serves multiple projects via runtime inputs. APIM workflows are conditionally generated based on project structure.
 
 ---
 
 ## Usage Examples
 
-### Basic Setup
+### Basic Setup (REQUIRED FORMAT)
 ```
-"Set up CI/CD for c:\Workspace\playground\project-simple-ipaas"
+"Set up CI/CD workflows for project: project-simple-ipaas"
+```
+This generates 3 workflows (terraform-ci, deploy, destroy)
+
+```
+"Set up CI/CD workflows for project: project-demo-ipaas-by-ai"
+```
+This generates 6 workflows (3 standard + 3 APIM-specific)
+
+### Deploying with Specific Project (Once workflows are created)
+```
+"Trigger deployment for project: project-simple-ipaas to dev environment"
 ```
 
 ### With Customization
 ```
-"Set up CI/CD for my project with Slack notifications and cost estimation"
+"Set up CI/CD workflows for project: project-demo-ipaas-by-ai with Slack notifications and cost estimation"
 ```
 
 ### Multi-Environment
 ```
-"Generate workflows for dev and prod environments with approval gates"
+"Set up CI/CD workflows for project: project-simple-ipaas for dev and prod environments with approval gates"
 ```
+
+⚠️ **All examples must include the project name as a mandatory parameter**
 
 ---
 
@@ -122,12 +239,124 @@ Ask me to add:
 
 ## How I Work
 
-1. **Analyze** your project structure and Terraform configuration
-2. **Extract** environment variables, modules, and backend settings
-3. **Generate** three workflow YAML files with inline documentation
-    - Each workflow includes a step that creates `backend.tfvars` from secrets (if present) or uses a provided backend snippet. The workflows then call `terraform init -backend-config=backend.tfvars`.
-4. **Provide** setup instructions for GitHub Secrets
-5. **Validate** workflow syntax and best practices
+1. **Validate Project Name** (FIRST STEP - MANDATORY)
+   - Check that the provided project name exists in workspace
+   - Abort if project name is missing or invalid
+   - Display available projects if invalid
+
+2. **Check Existing Workflows** (SECOND STEP - MANDATORY)
+   - Scan `.github/workflows/` directory for existing workflow files
+   - Check for:
+     - `terraform-ci.yaml`, `deploy.yaml`, `destroy.yaml`
+     - `apim-ci.yaml`, `apim-deploy.yaml`, `apim-destroy.yaml`
+   - If ANY workflows exist:
+     - **STOP and prompt user** with options:
+       - ✅ "Overwrite existing workflows" (replace all)
+       - ✅ "Merge with existing workflows" (keep existing, add missing)
+       - ✅ "Skip generation" (abort)
+       - ✅ "Review differences first" (show what would be created/changed)
+     - **WAIT for user decision** before proceeding
+   - If NO workflows exist: Proceed to next step
+   
+3. **Detect APIM Module**
+   - Check if `{PROJECT_NAME}/apim/` directory exists
+   - If YES: Generate 6 workflows (3 standard + 3 APIM-specific)
+   - If NO: Generate 3 workflows (standard only)
+   
+4. **Analyze** the selected project structure and Terraform configuration
+
+5. **Extract** environment variables, modules, and backend settings from the specified project
+
+6. **Generate** workflow YAML files **in `.github/workflows/` at repo root** with inline documentation
+   - **Standard workflows** (always generated):
+     - Each workflow includes:
+       - `workflow_dispatch` input requiring `project_name` selection (dropdown with available projects)
+       - `environment` input for deploy/destroy workflows (dev/staging/prod)
+       - Dynamic working directory: `./${{ inputs.project_name }}/env/${{ inputs.environment }}/`
+       - Dynamic backend state key: `terraform/${{ inputs.project_name }}/${{ inputs.environment }}/terraform.tfstate`
+       - Validation step to check project directory exists before running Terraform
+       - Step to create `backend.tfvars` from secrets at runtime
+       - Workflows call `terraform init -backend-config=backend.tfvars`
+   
+   - **APIM workflows** (generated only if `apim/` directory detected):
+     - Same structure as standard workflows but:
+       - Working directory: `./${{ inputs.project_name }}/apim/`
+       - Backend state key: `terraform/${{ inputs.project_name }}/apim/terraform.tfstate`
+       - Project name dropdown filtered to only show projects with APIM
+   
+7. **Provide** setup instructions for GitHub Secrets
+
+8. **Validate** workflow syntax and best practices
+
+**Critical Rules**: 
+- Workflows are NEVER created inside project directories. They are always created in `.github/workflows/` at the repository root and use input parameters to determine which project to operate on.
+- Existing workflows are NEVER overwritten without explicit user confirmation.
+
+## Mandatory Input Parameter Enforcement
+
+⚠️ **The `project_name` parameter is REQUIRED and NON-NEGOTIABLE**
+
+- ✅ Requests **WITH** project name: Proceed normally
+- ❌ Requests **WITHOUT** project name: 
+  - Do not generate workflows
+  - Prompt user: *"Please specify the project name. Available projects: project-simple-ipaas, project-demo-ipaas-by-ai"*
+  - Wait for user to provide valid project name before proceeding
+
+**Why this is important**: This ensures workflows are generated for the correct project and prevents accidental deployments to the wrong infrastructure.
+
+---
+
+## Workflow File Location Requirements
+
+🎯 **Workflows MUST be created at repository root**
+
+- ✅ **Correct**: `.github/workflows/terraform-ci.yaml` (at repo root)
+- ✅ **Correct**: `.github/workflows/deploy.yaml` (at repo root)
+- ✅ **Correct**: `.github/workflows/destroy.yaml` (at repo root)
+- ❌ **WRONG**: `project-simple-ipaas/.github/workflows/deploy.yaml`
+- ❌ **WRONG**: `project-demo-ipaas-by-ai/.github/workflows/terraform-ci.yaml`
+
+**Rationale**: 
+- One set of workflows serves ALL projects in the monorepo
+- Projects are selected via `workflow_dispatch` input at runtime
+- No duplication of workflow code across projects
+- Centralized workflow management and updates
+
+---
+
+## Existing Workflow Detection & Handling
+
+⚠️ **Before creating any workflows, the assistant MUST check for existing files**
+
+**Detection Process**:
+1. Check if `.github/workflows/` directory exists
+2. Scan for existing workflow files (terraform-ci.yaml, deploy.yaml, destroy.yaml, apim-*.yaml)
+3. If ANY workflows exist:
+   - **HALT** workflow generation
+   - **DISPLAY** list of existing workflows found
+   - **PROMPT** user with options:
+     - `Overwrite all` - Replace all existing workflows with new ones
+     - `Merge` - Keep existing, only add missing workflows
+     - `Skip` - Cancel generation
+     - `Review` - Show diff of what would change
+   - **WAIT** for user response before proceeding
+
+**Example Prompt**:
+```
+⚠️ Existing workflows detected in .github/workflows/:
+- terraform-ci.yaml
+- deploy.yaml
+
+How would you like to proceed?
+1. Overwrite all existing workflows
+2. Merge (add missing: destroy.yaml, apim-*.yaml)
+3. Skip workflow generation
+4. Review differences first
+
+Please select an option (1-4):
+```
+
+**Safety Rule**: NEVER overwrite existing workflows without explicit user confirmation.
 
 ---
 
@@ -138,19 +367,39 @@ Before using generated workflows:
 - [ ] Cloud provider credentials/service principal configured
 - [ ] Terraform backend (Storage Account/S3/GCS) provisioned
 - [ ] Branch protection rules on `main` (recommended)
+- [ ] `.github/workflows/` directory exists at repo root (will be created if missing)
+- [ ] Multiple projects exist in workspace with structure: `{project-name}/env/{environment}/`
+- [ ] Review existing workflows (if any) before generation to avoid conflicts
 
 ---
 
 ## Quick Reference
 
-| Workflow | Trigger | Duration | Approval |
-|----------|---------|----------|----------|
-| terraform-ci | PR | 3-5 min | No |
-| deploy | Push to main | 5-10 min | Optional |
-| destroy | Manual | 5-10 min | Required |
+### Standard Workflows (Always Generated)
+| Workflow | Trigger | Duration | Input | Approval |
+|----------|---------|----------|-------|----------|
+| terraform-ci | PR OR Manual | 3-5 min | project_name (required) | No |
+| deploy | Manual Only | 5-10 min | project_name + environment (both required) | Optional |
+| destroy | Manual Only | 5-10 min | project_name + environment (both required) | Required |
+
+### APIM Workflows (Generated if APIM detected)
+| Workflow | Trigger | Duration | Input | Approval |
+|----------|---------|----------|-------|----------|
+| apim-ci | PR OR Manual | 3-5 min | project_name (APIM projects only) | No |
+| apim-deploy | Manual Only | 5-10 min | project_name + environment (APIM projects only) | Optional |
+| apim-destroy | Manual Only | 5-10 min | project_name + environment (APIM projects only) | Required |
+
+**Workflow Location**: All workflows reside in `.github/workflows/` at repository root.
+
+**Total Workflows**:
+- Projects WITHOUT APIM: 3 workflows
+- Projects WITH APIM: 6 workflows (3 standard + 3 APIM)
 
 ---
 
-**Version**: 1.0  
+**Version**: 1.3  
 **Compatible**: Terraform ≥1.5.0, GitHub Actions  
-**Supports**: Azure, AWS, GCP
+**Supports**: Azure, AWS, GCP  
+**Architecture**: Monorepo with centralized workflows serving multiple projects  
+**APIM Support**: Automatic detection and dedicated workflow generation  
+**Safety**: Existing workflow detection with user confirmation before overwrite

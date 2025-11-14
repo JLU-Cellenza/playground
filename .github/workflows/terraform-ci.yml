@@ -1,45 +1,51 @@
 name: Terraform CI
 
 on:
-  push:
-    branches: [ main ]
-    paths:
-      - 'project-demo-ipaas-by-ai/env/**'
-      - 'project-demo-ipaas-by-ai/modules/**'
-      - '.github/workflows/terraform-ci.yml'
   pull_request:
     branches: [ main ]
-    paths:
-      - 'project-demo-ipaas-by-ai/env/**'
-      - 'project-demo-ipaas-by-ai/modules/**'
-      - '.github/workflows/terraform-ci.yml'
   workflow_dispatch:
     inputs:
+      project_name:
+        description: 'Project to validate'
+        required: true
+        type: choice
+        options:
+          - project-simple-ipaas
+          - project-demo-ipaas-by-ai
       environment:
-        description: 'Environment to run (dev or prd)'
+        description: 'Environment to validate (dev or prd)'
         required: true
         default: 'dev'
         type: choice
         options:
           - dev
           - prd
-      auto_apply:
-        description: 'Set true to run terraform apply (requires TERRAFORM_APPLY secret)'
-        required: false
-        default: 'false'
 
 jobs:
   terraform:
-    name: Terraform CI - ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || 'dev' }}
+    name: Terraform CI - ${{ github.event_name == 'workflow_dispatch' && format('{0}/{1}', github.event.inputs.project_name, github.event.inputs.environment) || 'PR Validation' }}
     runs-on: ubuntu-latest
+
+    env:
+      # For PR events, default to project-demo-ipaas-by-ai/dev for validation
+      PROJECT_NAME: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.project_name || 'project-demo-ipaas-by-ai' }}
+      ENVIRONMENT: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || 'dev' }}
 
     defaults:
       run:
-        working-directory: project-demo-ipaas-by-ai/env/${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || 'dev' }}
+        working-directory: ${{ env.PROJECT_NAME }}/env/${{ env.ENVIRONMENT }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Validate Project Directory
+        run: |
+          if [ ! -d "$GITHUB_WORKSPACE/${{ env.PROJECT_NAME }}/env/${{ env.ENVIRONMENT }}" ]; then
+            echo "::error::Project directory ${{ env.PROJECT_NAME }}/env/${{ env.ENVIRONMENT }} does not exist"
+            exit 1
+          fi
+          echo "✅ Project directory validated: ${{ env.PROJECT_NAME }}/env/${{ env.ENVIRONMENT }}"
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -57,16 +63,6 @@ jobs:
           SUBSCRIPTION_ID=$(az account show --query id -o tsv)
           echo "subscription_id=$SUBSCRIPTION_ID" >> $GITHUB_OUTPUT
 
-      - name: Set Environment Variable
-        id: envname
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            ENV=${{ github.event.inputs.environment }}
-          else
-            ENV=dev
-          fi
-          echo "environment=$ENV" >> $GITHUB_OUTPUT
-
       - name: Terraform Format Check
         run: terraform fmt -check -recursive
 
@@ -82,23 +78,16 @@ jobs:
         run: terraform validate
 
       - name: Terraform Plan
-        run: terraform plan -var-file=${{ steps.envname.outputs.environment }}.tfvars -out=plan.tfplan
+        run: terraform plan -var-file=${{ env.ENVIRONMENT }}.tfvars -out=plan.tfplan
         env:
           ARM_SUBSCRIPTION_ID: ${{ steps.subscription.outputs.subscription_id }}
           ARM_CLIENT_ID: ${{ fromJSON(secrets.AZURE_CREDENTIALS).clientId }}
           ARM_CLIENT_SECRET: ${{ fromJSON(secrets.AZURE_CREDENTIALS).clientSecret }}
           ARM_TENANT_ID: ${{ fromJSON(secrets.AZURE_CREDENTIALS).tenantId }}
 
-      - name: Optional Apply
-        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.auto_apply == 'true' }}
-        env:
-          TERRAFORM_APPLY: ${{ secrets.TERRAFORM_APPLY }}
-          ARM_SUBSCRIPTION_ID: ${{ steps.subscription.outputs.subscription_id }}
-          ARM_CLIENT_ID: ${{ fromJSON(secrets.AZURE_CREDENTIALS).clientId }}
-          ARM_CLIENT_SECRET: ${{ fromJSON(secrets.AZURE_CREDENTIALS).clientSecret }}
-          ARM_TENANT_ID: ${{ fromJSON(secrets.AZURE_CREDENTIALS).tenantId }}
-        run: |
-          if [ "$TERRAFORM_APPLY" != "true" ]; then
-            echo "TERRAFORM_APPLY secret not set to 'true'. Aborting apply."; exit 1
-          fi
-          terraform apply -auto-approve plan.tfplan
+      - name: Upload Plan Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-plan-${{ env.PROJECT_NAME }}-${{ env.ENVIRONMENT }}
+          path: ${{ env.PROJECT_NAME }}/env/${{ env.ENVIRONMENT }}/plan.tfplan
+          retention-days: 5
