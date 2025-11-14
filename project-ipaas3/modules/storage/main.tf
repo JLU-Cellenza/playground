@@ -44,19 +44,14 @@ resource "azurerm_monitor_diagnostic_setting" "storage" {
   target_resource_id         = azurerm_storage_account.this.id
   log_analytics_workspace_id = var.log_analytics_workspace_id
 
-  enabled_log {
-    category = "StorageWrite"
-  }
-
-  enabled_log {
-    category = "StorageDelete"
-  }
-
-  enabled_metric {
+  # Storage accounts only support metrics at the account level, not logs
+  metric {
     category = "Transaction"
+    enabled  = true
   }
 
-  enabled_metric {
+  metric {
     category = "Capacity"
+    enabled  = true
   }
 }
