@@ -514,6 +514,29 @@ module "apim" {
 | **Log Analytics** | Centralized logging | `retention_in_days`, `sku` | `workspace_id`, `workspace_customer_id` | Diagnostic settings from all services |
 | **App Insights** | APM monitoring | `retention_in_days` | `instrumentation_key` | Linked to Log Analytics; auto-instruments Functions/Logic Apps |
 | **Storage** | Blob/file/queue/table | `tier`, `replication_type` (LRS/GRS), `access_tier` (Hot/Cool), `containers` | `connection_string` (*sensitive*), `primary_blob_endpoint` | Functions require Storage; RBAC: Storage Blob Data Contributor |
+**NOTE: Azure Storage Account Diagnostic Settings**
+Only **metrics** (e.g., `Transaction`, `Capacity`) are supported at the account level for diagnostic settings.
+**Log categories** (e.g., `StorageRead`, `StorageWrite`, `StorageDelete`) are NOT supported and will cause deployment errors:
+  - Example error: `Error: creating Monitor Diagnostics Setting ... "Category 'StorageWrite' is not supported."`
+Always use the following pattern for storage account diagnostics:
+```hcl
+resource "azurerm_monitor_diagnostic_setting" "storage" {
+  name                       = "diag-${var.storage_account_name}"
+  target_resource_id         = azurerm_storage_account.this.id
+  log_analytics_workspace_id = var.log_analytics_workspace_id
+
+  metric {
+    category = "Transaction"
+    enabled  = true
+  }
+  metric {
+    category = "Capacity"
+    enabled  = true
+  }
+}
+```
+Do NOT include any `enabled_log` blocks for storage accounts.
+This applies to all future code generation and reviews for AIS platform deployments.
 | **SQL Database** | Relational OLTP | `sku` (S0/S1/P1), `backup_retention_days`, `threat_detection` | `server_fqdn`, `connection_string` (*sensitive*) | Store connection in Key Vault; enable auditing → Log Analytics |
 | **Cosmos DB** | NoSQL multi-region | `api` (SQL/MongoDB), `consistency_level`, `geo_locations`, `backup_type` | `endpoint`, `connection_string` (*sensitive*) | Use MI if supported; store connection in Key Vault |
 | **Event Hubs** | Streaming ingestion | `sku`, `partition_count`, `retention`, `capture_enabled` | `connection_string` (*sensitive*) | Functions/Logic Apps trigger from Event Hubs; Stream Analytics reads |
