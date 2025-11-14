@@ -79,9 +79,15 @@ If the project contains an `apim/` directory, **additional APIM-specific workflo
 - Input: 
   - `project_name` (dropdown, required - filtered to projects with APIM)
   - `environment` (dropdown, required - dev/staging/prod)
+  - `confirm` (string, required - must type "YES" to confirm)
+- **Pre-Deployment Validations:**
+  - ✅ Verify project has `apim/` directory (explicit error if missing)
+  - ✅ Verify destination Resource Group exists in Azure (explicit error if missing; requires main platform deployed first)
+  - ✅ Verify Terraform Apply secret is enabled
 - Actions: `init`, `plan`, `apply` for APIM
 - Working directory: `./${{ inputs.project_name }}/apim/`
 - Output: Deployed APIM resources, configuration
+- **⚠️ Important:** APIM takes 25-30 minutes to provision. Deploy main platform **first** to create Resource Group and Log Analytics.
 
 ### 6. `apim-destroy.yaml` - APIM Teardown
 - **Location**: `.github/workflows/apim-destroy.yaml` (repo root)
@@ -89,11 +95,26 @@ If the project contains an `apim/` directory, **additional APIM-specific workflo
 - Input: 
   - `project_name` (dropdown, required - filtered to projects with APIM)
   - `environment` (dropdown, required - dev/staging/prod)
+  - `confirm` (string, required - must type "DESTROY-APIM" to confirm)
+- **Pre-Destruction Validations:**
+  - ✅ Verify project has `apim/` directory (explicit error if missing)
+  - ✅ Verify Terraform Destroy secret is enabled
 - Actions: `plan -destroy`, manual approval, `destroy` for APIM
 - Working directory: `./${{ inputs.project_name }}/apim/`
 - Output: APIM destruction confirmation
 
 **Key Design**: Single set of workflows at repo root serve ALL projects by accepting project name at runtime. APIM workflows are generated only if APIM module is detected in the project.
+
+**Deployment Sequence (CRITICAL):**
+1. Deploy main platform **first** (Standard Deploy workflow) → creates Resource Group, Log Analytics, all core services
+2. Wait 5-10 minutes for main platform to stabilize
+3. Deploy APIM **second** (APIM Deploy workflow) → uses data sources to reference existing Resource Group and Log Analytics
+4. Validation gates prevent APIM deployment if Resource Group doesn't exist
+
+**Destruction Sequence (CRITICAL):**
+1. Destroy APIM **first** (APIM Destroy workflow)
+2. Wait 30-60 seconds for APIM to be removed
+3. Destroy main platform **second** (Standard Destroy workflow)
 
 ---
 
@@ -189,6 +210,81 @@ project-demo-ipaas-by-ai/              # ← PROJECT WITH APIM (6 workflows tota
 ```
 
 **Architecture**: One centralized workflow set serves multiple projects via runtime inputs. APIM workflows are conditionally generated based on project structure.
+
+---
+
+## APIM Deployment Prerequisites & Validation Controls
+
+**CRITICAL:** APIM must be deployed **after** the main platform. Both workflows now enforce strict validation gates.
+
+### Pre-Deployment Validation (APIM Deploy Workflow)
+
+The APIM Deploy workflow (`apim-deploy.yaml`) performs automated checks **before** running Terraform:
+
+1. **Project APIM Directory Check**
+   - Validates that the selected project has an `apim/` directory
+   - **Fails explicitly** if project lacks APIM support
+   - Error message lists available APIM projects
+
+2. **Resource Group Existence Check**
+   - Queries Azure to verify the destination Resource Group exists
+   - Uses Resource Group name from `{project}/env/{environment}/locals.tf`
+   - **Fails explicitly** if Resource Group not found
+   - Error message instructs user to deploy main platform first
+
+### Why These Controls Matter
+
+| Scenario | Without Controls | With Controls |
+|----------|------------------|---------------|
+| APIM deploy before main platform | Terraform hangs, data sources fail, 401 errors | Workflow stops immediately with clear error message |
+| Wrong project selected | Deploys APIM to unexpected location | Workflow validates project has apim/ and stops |
+| Manual Resource Group deletion | APIM deployment fails mid-way | Pre-deployment check catches missing RG upfront |
+| Incomplete Terraform setup | Cryptic Azure provider errors | Clear, actionable error messages |
+
+### Correct Deployment Sequence
+
+```
+Step 1: Deploy Main Platform
+  └─ Command: gh workflow run "Terraform Deploy" -f project_name=project-demo-ipaas-by-ai -f environment=dev -f confirm=YES
+  └─ Output: Resource Group + Log Analytics + all services (5-10 min)
+  └─ ✅ Check: az group show --name rg-dev-clz-sipaas
+
+Step 2: Wait 5 minutes (for RBAC propagation)
+
+Step 3: Deploy APIM
+  └─ Command: gh workflow run "Deploy APIM" -f project_name=project-demo-ipaas-by-ai -f environment=dev -f confirm=YES
+  └─ Pre-checks:
+     ├─ ✅ Validates apim/ directory exists
+     ├─ ✅ Validates Resource Group exists (created in Step 1)
+     └─ ✅ Validates Terraform Apply secret is enabled
+  └─ Output: APIM service (25-30 min)
+```
+
+### Validation Errors & Resolution
+
+**Error: "Project does not have an apim/ directory"**
+- Cause: Wrong project selected or project lacks APIM module
+- Resolution: Use `project-demo-ipaas-by-ai` (only project with APIM)
+
+**Error: "Destination Resource Group '$RG_NAME' does not exist"**
+- Cause: Main platform not deployed yet
+- Resolution: Deploy main platform first using Standard Deploy workflow
+
+**Error: "Could not determine resource group name"**
+- Cause: `locals.tf` missing or malformed
+- Resolution: Ensure `{project}/env/{environment}/locals.tf` defines `resource_group_name`
+
+### Destroy Sequence (Reverse Order)
+
+```
+Step 1: Destroy APIM First
+  └─ Command: gh workflow run "Destroy APIM" -f project_name=project-demo-ipaas-by-ai -f environment=dev -f confirm=DESTROY-APIM
+  └─ Output: APIM removed (5-10 min)
+
+Step 2: Destroy Main Platform
+  └─ Command: gh workflow run "Terraform Destroy" -f project_name=project-demo-ipaas-by-ai -f environment=dev -f confirm=DESTROY
+  └─ Output: All resources destroyed (5-10 min)
+```
 
 ---
 
