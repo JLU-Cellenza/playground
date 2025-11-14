@@ -1,4 +1,4 @@
-name: Terraform CI
+﻿name: Terraform CI
 
 on:
   pull_request:
@@ -44,7 +44,7 @@ jobs:
             echo "::error::Project directory ${{ env.PROJECT_NAME }}/env/${{ env.ENVIRONMENT }} does not exist"
             exit 1
           fi
-          echo "✅ Project directory validated: ${{ env.PROJECT_NAME }}/env/${{ env.ENVIRONMENT }}"
+          echo "Ô£à Project directory validated: ${{ env.PROJECT_NAME }}/env/${{ env.ENVIRONMENT }}"
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
