@@ -28,11 +28,21 @@ This chat mode assists with building an Azure Integration Services platform usin
 **Always follow these steps:**
 1. **Review requirements** — Ask clarifying questions about Azure subscription, region, environment, and service needs
 2. **Check naming compliance** — Validate against template: `<svc>-<env>-<org>-<project>-<purpose>-<instance>` (see `build-ais-platform.instructions.md`, "Naming, Tagging & Resource Strategy")
-3. **Validate pre-flight checks** — Confirm Azure auth, resource group exists, region supports services (see `build-ais-platform.instructions.md`, "Pre-Flight & Module Generation")
-4. **Generate modules** — Create one module per service with `main.tf`, `variables.tf`, `outputs.tf`, `README.md`
-5. **Separate APIM deployment** — **ALWAYS** create APIM in a separate folder (`apim/`) with its own state file, data sources for existing RG/Log Analytics, and dedicated deploy/destroy workflows (see "APIM Separation Pattern" below)
-6. **Apply security rules** — No secrets in code; use Key Vault; Managed Identities only; mark sensitive outputs (see `build-ais-platform.instructions.md`, "Security & Secrets")
-7. **Document via RUNBOOK** — Include `env/<env>/RUNBOOK.md` with deployment steps (see `build-ais-platform.instructions.md`, "Deployment Workflow")
+3. **Validate naming length limits** — **CRITICAL: Enforce Azure service naming constraints:**
+   - **Storage Account**: 3-24 characters, lowercase alphanumeric only, NO hyphens (e.g., `stdevorgproj01`)
+   - **Key Vault**: 3-24 characters, alphanumeric and hyphens only (e.g., `kv-dev-org-proj-01`)
+   - **Service Bus Namespace**: 6-50 characters, alphanumeric and hyphens
+   - **Logic App**: 1-80 characters
+   - **Function App**: 2-60 characters
+   - **APIM**: 1-50 characters
+   - **MUST shorten `organization` and `project_name` values if generated names exceed limits**
+   - **Example**: If `organization="cellenza"` and `project_name="simpleipaas"` produce a 28-char storage name, shorten to `org="clz"` and `project="sipaas"` to fit within 24 chars
+   - **Always calculate final resource name length BEFORE generating code**
+4. **Validate pre-flight checks** — Confirm Azure auth, resource group exists, region supports services (see `build-ais-platform.instructions.md`, "Pre-Flight & Module Generation")
+5. **Generate modules** — Create one module per service with `main.tf`, `variables.tf`, `outputs.tf`, `README.md`
+6. **Separate APIM deployment** — **ALWAYS** create APIM in a separate folder (`apim/`) with its own state file, data sources for existing RG/Log Analytics, and dedicated deploy/destroy workflows (see "APIM Separation Pattern" below)
+7. **Apply security rules** — No secrets in code; use Key Vault; Managed Identities only; mark sensitive outputs (see `build-ais-platform.instructions.md`, "Security & Secrets")
+8. **Document via RUNBOOK** — Include `env/<env>/RUNBOOK.md` with deployment steps (see `build-ais-platform.instructions.md`, "Deployment Workflow")
 
 **For detailed standards**, refer to sections in `build-ais-platform.instructions.md`:
 - Module structure & code organization → "Terraform Code Standards"
@@ -41,6 +51,67 @@ This chat mode assists with building an Azure Integration Services platform usin
 - Service-specific rules → "Service-Specific Implementation Rules"
 
 ## Critical Terraform Best Practices
+
+### Azure Naming Length Constraints
+
+**CRITICAL: Always validate resource name lengths BEFORE code generation**
+
+Azure services have strict naming requirements that MUST be enforced:
+
+| Service | Min | Max | Allowed Characters | Pattern Example |
+|---------|-----|-----|-------------------|-----------------|
+| **Storage Account** | 3 | **24** | Lowercase letters, numbers only (NO hyphens) | `stdevclzsipaas01` (16 chars) |
+| **Key Vault** | 3 | **24** | Letters, numbers, hyphens | `kv-dev-clz-sipaas-01` (19 chars) |
+| Service Bus Namespace | 6 | 50 | Letters, numbers, hyphens | `sb-dev-clz-sipaas-01` |
+| Logic App Standard | 1 | 80 | Letters, numbers, hyphens | `logic-dev-clz-sipaas-01` |
+| Function App | 2 | 60 | Letters, numbers, hyphens | `func-dev-clz-sipaas-01` |
+| API Management | 1 | 50 | Letters, numbers, hyphens | `apim-dev-clz-sipaas-01` |
+
+**Naming Pattern Template**: `<svc>-<env>-<org>-<project>-<purpose>-<instance>`
+
+**CRITICAL: All resource names MUST end with a numeric index (e.g., `01`, `02`, `001`)**
+
+**Length Calculation Rules**:
+1. **Storage Account** (NO hyphens): `st` + `env` + `org` + `project` + `index` ≤ 24 chars
+   - **MUST include index**: Last 2 digits (e.g., `01`, `02`)
+   - Example: `st` (2) + `dev` (3) + `clz` (3) + `sipaas` (6) + `01` (2) = **16 chars** ✅
+   - Bad (no index): `stdevclzsipaas` = **14 chars** ❌ INVALID - missing index
+   - Bad (too long): `st` (2) + `dev` (3) + `cellenza` (8) + `simpleipaas` (11) + `01` (2) = **26 chars** ❌
+   
+2. **Key Vault** (with hyphens): `kv-` + `env-` + `org-` + `project-` + `index` ≤ 24 chars
+   - **MUST include index**: Last segment (e.g., `01`, `02`)
+   - Example: `kv-` (3) + `dev-` (4) + `clz-` (4) + `sipaas-` (7) + `01` (2) = **20 chars** ✅
+   - Bad (no index): `kv-dev-clz-sipaas` = **18 chars** ❌ INVALID - missing index
+   - Bad (too long): `kv-` (3) + `dev-` (4) + `cellenza-` (9) + `simpleipaas-` (12) + `01` (2) = **30 chars** ❌
+
+**Automatic Shortening Strategy**:
+- If calculated name exceeds limit, **AUTOMATICALLY shorten** `organization` and `project_name` variables
+- Suggest abbreviated alternatives to user (e.g., "cellenza" → "clz", "simpleipaas" → "sipaas")
+- **ALWAYS validate final names before generating `locals.tf`**
+- **ALWAYS ensure names end with numeric index** (e.g., `01`, `02`, `001`)
+- Include validation rules in module `variables.tf` files
+- Reserve at least 2 characters for the index in length calculations
+
+**Example Variable Validation**:
+```hcl
+variable "storage_account_name" {
+  description = "Storage account name (3-24 lowercase alphanumeric chars, must end with numeric index)"
+  type        = string
+  validation {
+    condition     = can(regex("^[a-z0-9]{3,24}$", var.storage_account_name)) && can(regex("[0-9]{2}$", var.storage_account_name))
+    error_message = "Storage account name must be 3-24 lowercase alphanumeric characters and end with a 2-digit index (e.g., 01)"
+  }
+}
+
+variable "key_vault_name" {
+  description = "Key Vault name (3-24 chars, alphanumeric and hyphens only, must end with numeric index)"
+  type        = string
+  validation {
+    condition     = can(regex("^[a-zA-Z0-9-]{3,24}$", var.key_vault_name)) && can(regex("-[0-9]{2}$", var.key_vault_name))
+    error_message = "Key Vault name must be 3-24 characters, alphanumeric and hyphens only, and end with -XX index (e.g., -01)"
+  }
+}
+```
 
 ### Azure Provider Version
 **MUST use Azure provider `~> 4.0`** for Logic Apps Standard compatibility:
@@ -155,6 +226,10 @@ Always ask the operator for:
 - Networking requirements (VNets, subnets, NSGs)
 - RBAC and security requirements
 - Cost optimization goals
+- **Organization and project abbreviations** — Request SHORT names (3-6 chars recommended) to avoid exceeding Azure naming limits:
+  - Storage Account limit: 24 chars total (e.g., `stdevorgproj01` = 14 chars, leaves room for longer names)
+  - Key Vault limit: 24 chars total (e.g., `kv-dev-org-proj-01` = 19 chars)
+  - **Example**: Instead of `organization="cellenza"` and `project_name="simpleipaas"`, ask for `org="clz"` and `project="sipaas"`
 
 ### Example Prompt
 ```
@@ -164,7 +239,12 @@ Always ask the operator for:
 - Azure region?
 - Which services do you need (all 7 or a subset)?
 - Networking: VNet + subnets or existing VNet?
-- Naming convention: org, project, purpose prefixes?"
+- Naming convention: SHORT org abbreviation (3-6 chars, e.g., 'clz' for Cellenza)?
+- Naming convention: SHORT project name (3-8 chars, e.g., 'sipaas' for Simple iPaaS)?
+
+⚠️ Note: Storage Account names are limited to 24 characters (lowercase, no hyphens).
+         Key Vault names are limited to 24 characters (alphanumeric + hyphens).
+         Please provide abbreviated names to ensure compliance."
 ```
 
 ## Reference Documents
