@@ -61,6 +61,16 @@ module "logicapp" {
   tags = local.common_tags
 }
 
+# RBAC: Grant Terraform service principal (GitHub Actions) access to Key Vault secrets
+# This is needed for Terraform to create/manage secrets during deployment
+data "azurerm_client_config" "current" {}
+
+resource "azurerm_role_assignment" "terraform_keyvault_secrets_officer" {
+  scope                = module.keyvault.vault_id
+  role_definition_name = "Key Vault Secrets Officer"
+  principal_id         = data.azurerm_client_config.current.object_id
+}
+
 # RBAC: Grant Logic App Managed Identity access to Key Vault secrets
 resource "azurerm_role_assignment" "logicapp_keyvault_secrets_user" {
   scope                = module.keyvault.vault_id
@@ -77,7 +87,10 @@ resource "azurerm_role_assignment" "logicapp_servicebus_data_owner" {
 
 # Store Service Bus connection string in Key Vault
 resource "azurerm_key_vault_secret" "servicebus_connection_string" {
-  depends_on = [azurerm_role_assignment.logicapp_keyvault_secrets_user]
+  depends_on = [
+    azurerm_role_assignment.logicapp_keyvault_secrets_user,
+    azurerm_role_assignment.terraform_keyvault_secrets_officer
+  ]
 
   name         = "servicebus-connection-string"
   value        = module.servicebus.primary_connection_string
@@ -86,7 +99,10 @@ resource "azurerm_key_vault_secret" "servicebus_connection_string" {
 
 # Store Storage Account connection string in Key Vault
 resource "azurerm_key_vault_secret" "storage_connection_string" {
-  depends_on = [azurerm_role_assignment.logicapp_keyvault_secrets_user]
+  depends_on = [
+    azurerm_role_assignment.logicapp_keyvault_secrets_user,
+    azurerm_role_assignment.terraform_keyvault_secrets_officer
+  ]
 
   name         = "storage-connection-string"
   value        = module.storage.primary_connection_string
