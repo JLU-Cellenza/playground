@@ -1,7 +1,7 @@
 # Environment Configuration
 environment  = "dev"
-organization = "cellenza"
-project_name = "simpleipaas"
+organization = "clz"
+project_name = "sipaas"
 location     = "francecentral"
 
 # Ownership and Billing
