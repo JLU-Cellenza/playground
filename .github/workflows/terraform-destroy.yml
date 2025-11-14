@@ -13,7 +13,6 @@ on:
       environment:
         description: 'Environment to destroy (dev or prd)'
         required: true
-        default: 'dev'
         type: choice
         options:
           - dev

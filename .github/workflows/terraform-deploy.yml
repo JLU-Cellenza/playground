@@ -11,9 +11,8 @@ on:
           - project-simple-ipaas
           - project-demo-ipaas-by-ai
       environment:
-        description: 'Environment to deploy (dev or prd)'
+        description: 'Environment to deploy'
         required: true
-        default: 'dev'
         type: choice
         options:
           - dev

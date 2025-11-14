@@ -13,9 +13,8 @@ on:
           - project-simple-ipaas
           - project-demo-ipaas-by-ai
       environment:
-        description: 'Environment to validate (dev or prd)'
+        description: 'Environment to validate'
         required: true
-        default: 'dev'
         type: choice
         options:
           - dev
