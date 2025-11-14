@@ -56,14 +56,35 @@ jobs:
         with:
           terraform_version: '1.5.0'
 
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Get Azure Subscription ID
+        id: subscription
+        run: |
+          SUBSCRIPTION_ID=$(az account show --query id -o tsv)
+          echo "subscription_id=$SUBSCRIPTION_ID" >> $GITHUB_OUTPUT
+
       - name: Terraform Init
         run: terraform init -backend-config=backend.tfvars
+        env:
+          ARM_SUBSCRIPTION_ID: ${{ steps.subscription.outputs.subscription_id }}
+          ARM_CLIENT_ID: ${{ fromJSON(secrets.AZURE_CREDENTIALS).clientId }}
+          ARM_CLIENT_SECRET: ${{ fromJSON(secrets.AZURE_CREDENTIALS).clientSecret }}
+          ARM_TENANT_ID: ${{ fromJSON(secrets.AZURE_CREDENTIALS).tenantId }}
 
       - name: Terraform Plan Destroy
         id: plan
         run: |
           terraform plan -destroy -var-file=${{ github.event.inputs.environment }}.tfvars -out=destroy.tfplan
           terraform show -no-color destroy.tfplan > destroy_plan.txt
+        env:
+          ARM_SUBSCRIPTION_ID: ${{ steps.subscription.outputs.subscription_id }}
+          ARM_CLIENT_ID: ${{ fromJSON(secrets.AZURE_CREDENTIALS).clientId }}
+          ARM_CLIENT_SECRET: ${{ fromJSON(secrets.AZURE_CREDENTIALS).clientSecret }}
+          ARM_TENANT_ID: ${{ fromJSON(secrets.AZURE_CREDENTIALS).tenantId }}
 
       - name: Display Destroy Plan
         run: |
@@ -80,6 +101,11 @@ jobs:
 
       - name: Terraform Destroy
         run: terraform apply -auto-approve destroy.tfplan
+        env:
+          ARM_SUBSCRIPTION_ID: ${{ steps.subscription.outputs.subscription_id }}
+          ARM_CLIENT_ID: ${{ fromJSON(secrets.AZURE_CREDENTIALS).clientId }}
+          ARM_CLIENT_SECRET: ${{ fromJSON(secrets.AZURE_CREDENTIALS).clientSecret }}
+          ARM_TENANT_ID: ${{ fromJSON(secrets.AZURE_CREDENTIALS).tenantId }}
 
       - name: Destroy Summary
         if: always()
