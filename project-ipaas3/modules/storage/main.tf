@@ -56,13 +56,11 @@ resource "azurerm_monitor_diagnostic_setting" "storage" {
     category = "StorageDelete"
   }
 
-  metric {
+  enabled_metric {
     category = "Transaction"
-    enabled  = true
   }
 
-  metric {
+  enabled_metric {
     category = "Capacity"
-    enabled  = true
   }
 }

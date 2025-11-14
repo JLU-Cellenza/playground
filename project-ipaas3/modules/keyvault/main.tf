@@ -18,7 +18,6 @@ resource "azurerm_key_vault" "this" {
 
 # Diagnostic Settings
 resource "azurerm_monitor_diagnostic_setting" "keyvault" {
-  count                      = var.log_analytics_workspace_id != null ? 1 : 0
   name                       = "diag-${var.key_vault_name}"
   target_resource_id         = azurerm_key_vault.this.id
   log_analytics_workspace_id = var.log_analytics_workspace_id
@@ -31,8 +30,7 @@ resource "azurerm_monitor_diagnostic_setting" "keyvault" {
     category = "AzurePolicyEvaluationDetails"
   }
 
-  metric {
+  enabled_metric {
     category = "AllMetrics"
-    enabled  = true
   }
 }

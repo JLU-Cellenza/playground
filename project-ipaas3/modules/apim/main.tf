@@ -29,8 +29,7 @@ resource "azurerm_monitor_diagnostic_setting" "apim" {
     category = "WebSocketConnectionLogs"
   }
 
-  metric {
+  enabled_metric {
     category = "AllMetrics"
-    enabled  = true
   }
 }
