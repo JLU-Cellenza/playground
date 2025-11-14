@@ -9,6 +9,7 @@ on:
         type: choice
         options:
           - project-demo-ipaas-by-ai
+          - project-ipaas3
       environment:
         description: 'Environment to destroy (dev or prd)'
         required: true
@@ -42,6 +43,7 @@ jobs:
             echo "::error::Project ${{ github.event.inputs.project_name }} does not have an apim/ directory."
             echo "Only projects with APIM support are allowed. Available APIM projects:"
             echo "  - project-demo-ipaas-by-ai"
+            echo "  - project-ipaas3"
             exit 1
           fi
           echo "✅ APIM directory found: ${{ github.event.inputs.project_name }}/apim"

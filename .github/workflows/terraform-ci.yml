@@ -12,6 +12,7 @@ on:
         options:
           - project-simple-ipaas
           - project-demo-ipaas-by-ai
+          - project-ipaas3
       environment:
         description: 'Environment to validate'
         required: true
