@@ -91,6 +91,146 @@ Parameterization: provide `location` and `resource_group_name` via variables; se
 
 **Logging:** Diagnostic settings → Log Analytics (90+ day retention); Azure Monitor alerts for security events; RBAC-restricted log access.
 
+### Terraform Service Principal RBAC for Key Vault
+
+**CRITICAL:** When Terraform manages Key Vault secrets, the **Terraform service principal (GitHub Actions, local automation, or CI/CD runner)** must have explicit RBAC permission to write secrets. Failure to assign this role results in HTTP 403 "Forbidden" errors during `terraform apply`.
+
+**Problem Scenario:**
+```
+Error: checking for presence of existing Secret "my-secret"
+(Key Vault "https://my-kv.vault.azure.net/"):
+StatusCode=403 Code="Forbidden"
+Message="Caller is not authorized to perform action on resource.
+Action: 'Microsoft.KeyVault/vaults/secrets/getSecret/action'"
+Caller: appid=***;oid=8debc977-96ec-4cf6-880f-6f28975af211
+Assignment: (not found)
+```
+
+**Root Cause:** The Terraform automation principal has no role assignment on the Key Vault, even if deployed applications (Logic Apps, Functions) have roles assigned.
+
+**Solution: Auto-Assign RBAC via Terraform**
+
+Add this to `env/<env>/main.tf` **BEFORE** creating any secrets:
+
+```hcl
+# Fetch current Terraform service principal context
+data "azurerm_client_config" "current" {}
+
+# Grant Terraform service principal "Key Vault Secrets Officer" role
+# This allows Terraform to create, read, update, delete secrets during deployment
+resource "azurerm_role_assignment" "terraform_keyvault_secrets_officer" {
+  scope                = module.keyvault.vault_id  # or azurerm_key_vault.this.id
+  role_definition_name = "Key Vault Secrets Officer"
+  principal_id         = data.azurerm_client_config.current.object_id  # Auto-detects current principal
+}
+
+# Dependency: All secrets depend on this role assignment
+resource "azurerm_key_vault_secret" "example" {
+  depends_on = [azurerm_role_assignment.terraform_keyvault_secrets_officer]
+  
+  name         = "my-secret"
+  value        = "secret-value"
+  key_vault_id = module.keyvault.vault_id
+}
+```
+
+**Why This Works:**
+1. `data.azurerm_client_config.current.object_id` automatically resolves to the **identity running Terraform** (GitHub Actions service principal, local user, local service account, etc.)
+2. `azurerm_role_assignment` grants that principal the "Key Vault Secrets Officer" role on the Key Vault
+3. `depends_on` ensures the role assignment is created **before** secrets are written
+4. Role propagation typically takes 30–60 seconds; Azure eventually grants access
+
+**RBAC Role Assignments Required:**
+
+| Principal | Role | Scope | Purpose |
+|-----------|------|-------|---------|
+| **Terraform Service Principal** | `Key Vault Secrets Officer` | Key Vault | Create/update/delete secrets during `terraform apply` |
+| **Application MI (Logic App)** | `Key Vault Secrets User` | Key Vault | Read secrets at runtime |
+| **Application MI (Functions)** | `Key Vault Secrets User` | Key Vault | Read secrets at runtime |
+
+**Complete Example (env/dev/main.tf):**
+
+```hcl
+module "keyvault" {
+  source = "../../modules/keyvault"
+  name   = local.keyvault_name
+  # ... other variables
+}
+
+data "azurerm_client_config" "current" {}
+
+# ✅ Terraform: Can create/manage secrets
+resource "azurerm_role_assignment" "terraform_keyvault_secrets_officer" {
+  scope                = module.keyvault.vault_id
+  role_definition_name = "Key Vault Secrets Officer"
+  principal_id         = data.azurerm_client_config.current.object_id
+}
+
+# ✅ Logic App: Can read secrets at runtime
+resource "azurerm_role_assignment" "logicapp_keyvault_secrets_user" {
+  scope                = module.keyvault.vault_id
+  role_definition_name = "Key Vault Secrets User"
+  principal_id         = module.logicapp.identity_principal_id
+}
+
+# ✅ Secrets: Depend on Terraform's role assignment
+resource "azurerm_key_vault_secret" "servicebus_connection" {
+  depends_on = [azurerm_role_assignment.terraform_keyvault_secrets_officer]
+  
+  name         = "servicebus-connection-string"
+  value        = module.servicebus.primary_connection_string
+  key_vault_id = module.keyvault.vault_id
+}
+```
+
+**GitHub Actions Workflow Setup:**
+
+Ensure the GitHub Actions runner has the correct Azure credentials via `AZURE_CREDENTIALS` secret:
+
+```yaml
+- name: Azure Login
+  uses: azure/login@v2
+  with:
+    creds: ${{ secrets.AZURE_CREDENTIALS }}
+  env:
+    ARM_SUBSCRIPTION_ID: 3314da4a-7f83-4380-9d92-7b96c6fa78c6
+    ARM_CLIENT_ID: ${{ fromJson(secrets.AZURE_CREDENTIALS).clientId }}
+    ARM_CLIENT_SECRET: ${{ fromJson(secrets.AZURE_CREDENTIALS).clientSecret }}
+    ARM_TENANT_ID: ${{ fromJson(secrets.AZURE_CREDENTIALS).tenantId }}
+```
+
+The service principal referenced in `AZURE_CREDENTIALS` will automatically receive the role assignment via Terraform.
+
+**Local Deployment (Developer Machine):**
+
+If running Terraform locally, ensure your Azure CLI login identity has sufficient permissions:
+
+```bash
+# Login as the service principal or user running Terraform
+az login --service-principal \
+  -u $ARM_CLIENT_ID \
+  -p $ARM_CLIENT_SECRET \
+  --tenant $ARM_TENANT_ID
+
+# Verify you have "Contributor" role on the subscription
+az role assignment list --assignee "$(az ad signed-in-user show --query id -o tsv)" \
+  --scope "/subscriptions/$ARM_SUBSCRIPTION_ID"
+
+# The role assignment resource in Terraform will grant yourself "Key Vault Secrets Officer"
+terraform apply
+```
+
+**Troubleshooting:**
+
+| Error | Cause | Solution |
+|-------|-------|----------|
+| `StatusCode=403 Forbidden` | Terraform principal has no Key Vault role | Add `azurerm_role_assignment` with `terraform_keyvault_secrets_officer` |
+| `Principal does not exist` | Service principal OID is incorrect or expired | Verify `data.azurerm_client_config.current.object_id` resolves correctly |
+| `Role propagation delay` | RBAC assignment exists but hasn't propagated | Wait 60–120 seconds and re-run `terraform apply` |
+| `AzureRequestFailed: 401 Unauthorized` | Azure credentials expired or invalid | Re-run `az login` or refresh GitHub Actions credentials |
+
+**Security Best Practice:** After secrets are created, consider removing the Terraform service principal's "Key Vault Secrets Officer" role and replacing it with time-limited access via temporary credentials or OIDC federation. This limits the attack surface if credentials are compromised.
+
 ## Terraform Code Standards
 
 **Module structure:** One module per service (`apim`, `logicapp`, `servicebus`, `function_app`, `key_vault`, `log_analytics`, `app_insights`). Files: `main.tf`, `variables.tf` (with `type`/`description` per TFNFR17/18), `outputs.tf`, `README.md`. No hardcoded values; no circular deps; never `depends_on` module outputs.
