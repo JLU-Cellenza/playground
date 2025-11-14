@@ -54,6 +54,174 @@ applyTo: '**/*.tf, **/terraform.tfvars, **/build-ais-platform/**'
 
 **Production (Human):** Approve plan → `terraform apply "plan.tfplan"` → validate (resources exist, connectivity works, logs flow) → rollback if needed (`terraform destroy` or revert commit)
 
+## Backend Configuration & Tfvars Files for CI/CD
+
+**CRITICAL: GitHub Actions workflows require `backend.tfvars` and environment-specific `.tfvars` files to be committed to the repository.**
+
+### Files That MUST Be Committed
+
+Unlike traditional Terraform projects where tfvars files are gitignored, **CI/CD workflows need these files in version control** to function properly:
+
+**Required files per environment:**
+```
+project-name/
+├── env/dev/
+│   ├── backend.tfvars      # ✅ COMMIT THIS - Backend configuration (no secrets)
+│   ├── dev.tfvars          # ✅ COMMIT THIS - Environment variables (no secrets)
+│   └── dev.tfvars.example  # ✅ COMMIT THIS - Template for local development
+└── apim/                   # If APIM module exists
+    ├── backend.tfvars      # ✅ COMMIT THIS - APIM backend configuration
+    └── dev.tfvars          # ✅ COMMIT THIS - APIM environment variables
+```
+
+**Why these files must be committed:**
+- GitHub Actions workflows run `terraform init -backend-config=backend.tfvars`
+- Workflows run `terraform plan -var-file=dev.tfvars`
+- Without these files in the repo, workflows fail with "file not found" errors
+- These files contain **configuration, not secrets** — Azure credentials come from GitHub Secrets
+
+### Backend Configuration Pattern
+
+**`env/dev/backend.tfvars` example:**
+```hcl
+resource_group_name  = "rg-common-iac-01"
+storage_account_name = "stocommoniac01"
+container_name       = "terraform"
+key                  = "project-name-dev.tfstate"
+```
+
+**`apim/backend.tfvars` example (if APIM exists):**
+```hcl
+resource_group_name  = "rg-common-iac-01"
+storage_account_name = "stocommoniac01"
+container_name       = "terraform"
+key                  = "project-name-dev-apim.tfstate"  # Different state file
+```
+
+**Key principles:**
+- ✅ **DO commit:** Resource group name, storage account name, container name, state file key
+- ❌ **DO NOT commit:** Access keys, SAS tokens, service principal credentials (use GitHub Secrets)
+- ✅ **DO use:** Same storage account for all projects, different state file keys per project/environment
+- ✅ **DO separate:** APIM state file from main platform state file (different keys)
+
+### Environment Variables Pattern
+
+**`env/dev/dev.tfvars` example:**
+```hcl
+# Azure region
+location = "francecentral"
+
+# Naming components (no secrets)
+environment  = "dev"
+organization = "clz"
+project      = "ipaas3"
+
+# Tagging (no secrets)
+cost_center = "demo"
+owner       = "cellenza"
+
+# Service configuration (no secrets)
+log_retention_days = 30
+apim_sku_name      = "Developer_1"  # Or "StandardV2_1" for prod
+```
+
+**`apim/dev.tfvars` example (if APIM exists):**
+```hcl
+# Reference to existing resources created by main platform
+resource_group_name           = "rg-dev-clz-ipaas3-01"
+log_analytics_workspace_name  = "la-dev-clz-ipaas3-01"
+
+# APIM-specific configuration
+location             = "francecentral"
+environment          = "dev"
+organization         = "clz"
+project              = "ipaas3"
+apim_publisher_name  = "Cellenza"
+apim_publisher_email = "contact@cellenza.com"
+apim_sku_name        = "Developer_1"  # Or "StandardV2_1" for prod
+
+# Tagging
+cost_center = "demo"
+owner       = "cellenza"
+```
+
+### What NOT to Commit (Security)
+
+**Never commit these to version control:**
+- ❌ Storage account access keys or SAS tokens
+- ❌ Service principal client secrets
+- ❌ Azure subscription IDs (use `ARM_SUBSCRIPTION_ID` environment variable)
+- ❌ Terraform state files (`*.tfstate`, `*.tfstate.backup`)
+- ❌ `.terraform/` directory (downloaded providers/modules)
+- ❌ Any files containing passwords, API keys, certificates, or connection strings
+
+**Use GitHub Secrets for:**
+- `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`
+- `TF_BACKEND_STORAGE_ACCOUNT`, `TF_BACKEND_CONTAINER`, `TF_BACKEND_KEY` (if not using backend.tfvars)
+- Any application-specific secrets that need to be stored in Key Vault
+
+### `.gitignore` Configuration
+
+**Recommended `.gitignore` for AIS platform projects:**
+```gitignore
+# Terraform state files (NEVER commit)
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+
+# Terraform directories (NEVER commit)
+.terraform/
+.terraform.lock.hcl
+
+# Crash log files
+crash.log
+crash.*.log
+
+# Override files (local development)
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Local environment files (NEVER commit)
+.env
+.env.local
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# NOTE: Do NOT ignore backend.tfvars or <env>.tfvars files
+# They are needed for CI/CD workflows and contain no secrets
+```
+
+### Migration Strategy (Existing Projects)
+
+If you have an existing project where tfvars files were gitignored:
+
+1. **Review files for secrets:** Ensure `backend.tfvars` and `dev.tfvars` contain NO secrets
+2. **Force-add files:** `git add -f env/dev/backend.tfvars env/dev/dev.tfvars`
+3. **Commit:** `git commit -m "feat: Add backend and tfvars files for CI/CD workflows"`
+4. **Verify:** Check that files appear in GitHub repository
+5. **Test workflow:** Trigger CI workflow to confirm it can now access the files
+
+### Troubleshooting CI/CD Failures
+
+**Error: "backend.tfvars: no such file or directory"**
+- **Cause:** File not committed to repository
+- **Fix:** `git add -f env/dev/backend.tfvars` then commit and push
+
+**Error: "dev.tfvars: no such file or directory"**
+- **Cause:** File not committed to repository
+- **Fix:** `git add -f env/dev/dev.tfvars` then commit and push
+
+**Error: "Error loading backend config: access denied"**
+- **Cause:** GitHub Secrets missing or incorrect (AZURE_CLIENT_ID, etc.)
+- **Fix:** Verify GitHub Secrets are configured correctly in repository settings
+
 ## Naming, Tagging & Resource Strategy
 
 Naming template:
@@ -250,9 +418,16 @@ ais-platform-terraform/
 │   └── {main,variables,outputs}.tf + README.md
 ├── env/{dev,prod}/
 │   ├── main.tf + variables.tf + outputs.tf
+│   ├── backend.tfvars (✅ COMMITTED - no secrets)
+│   ├── {dev,prod}.tfvars (✅ COMMITTED - no secrets)
 │   ├── {dev,prod}.tfvars.example
 │   └── RUNBOOK.md
-├── backend.tf + provider.tf + versions.tf + .gitignore + README.md + CHANGELOG.md
+├── apim/ (if APIM module exists)
+│   ├── main.tf + variables.tf + outputs.tf + terraform.tf
+│   ├── backend.tfvars (✅ COMMITTED - separate state file key)
+│   └── {dev,prod}.tfvars (✅ COMMITTED - references existing resources)
+├── .gitignore (excludes *.tfstate, .terraform/, but NOT backend.tfvars or <env>.tfvars)
+├── backend.tf + provider.tf + versions.tf + README.md + CHANGELOG.md
 ```
 
 ## Service-Specific Implementation Rules
@@ -523,12 +698,16 @@ Per work item / PR, deliver:
 - [ ] **Service inventory** — list of all services being deployed
 - [ ] **Modules** — each service in `modules/<service-name>/` with `main.tf`, `variables.tf`, `outputs.tf`, `README.md`
 - [ ] **Environment overlay** — `env/<env>/main.tf` instantiates modules with env-specific vars
-- [ ] **Example tfvars** — `env/<env>/<env>.tfvars.example` (no secrets)
+- [ ] **Backend configuration** — `env/<env>/backend.tfvars` committed to repo (no secrets)
+- [ ] **Environment variables** — `env/<env>/<env>.tfvars` committed to repo (no secrets)
+- [ ] **Example tfvars** — `env/<env>/<env>.tfvars.example` for local development reference
+- [ ] **APIM backend/tfvars** — `apim/backend.tfvars` and `apim/<env>.tfvars` if APIM module exists
 - [ ] **Runbook** — `env/<env>/RUNBOOK.md` with TF commands, secret retrieval, RBAC, rollback steps
 - [ ] **Documentation** — Module READMEs with purpose, inputs, outputs, dependencies, examples
 - [ ] **Cross-service wiring** — All dependencies documented (e.g., Function App → Storage)
 - [ ] **RBAC assignments** — All MI role assignments in Terraform (not manual)
 - [ ] **Changelog** — `CHANGELOG.md` entry with services added, changes, PR reference
+- [ ] **.gitignore** — Configured to ignore state files but NOT backend.tfvars or <env>.tfvars
 
 ## Decision Matrix: When to Choose What
 
