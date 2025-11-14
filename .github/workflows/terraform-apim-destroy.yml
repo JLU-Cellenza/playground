@@ -3,6 +3,12 @@ name: Destroy APIM
 on:
   workflow_dispatch:
     inputs:
+      project_name:
+        description: 'Project to destroy APIM for (must have apim/ directory)'
+        required: true
+        type: choice
+        options:
+          - project-demo-ipaas-by-ai
       environment:
         description: 'Environment to destroy (dev or prd)'
         required: true
@@ -18,17 +24,27 @@ on:
 
 jobs:
   destroy-apim:
-    name: Destroy APIM - ${{ github.event.inputs.environment }}
+    name: Destroy APIM for ${{ github.event.inputs.project_name }} - ${{ github.event.inputs.environment }}
     runs-on: ubuntu-latest
     environment: ${{ github.event.inputs.environment }}
     
     defaults:
       run:
-        working-directory: project-demo-ipaas-by-ai/apim
+        working-directory: ${{ github.event.inputs.project_name }}/apim
     
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Validate Project APIM Directory
+        run: |
+          if [ ! -d "$GITHUB_WORKSPACE/${{ github.event.inputs.project_name }}/apim" ]; then
+            echo "::error::Project ${{ github.event.inputs.project_name }} does not have an apim/ directory."
+            echo "Only projects with APIM support are allowed. Available APIM projects:"
+            echo "  - project-demo-ipaas-by-ai"
+            exit 1
+          fi
+          echo "✅ APIM directory found: ${{ github.event.inputs.project_name }}/apim"
 
       - name: Validate Confirmation
         run: |

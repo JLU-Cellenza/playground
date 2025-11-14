@@ -3,6 +3,12 @@ name: Deploy APIM
 on:
   workflow_dispatch:
     inputs:
+      project_name:
+        description: 'Project to deploy APIM for (must have apim/ directory)'
+        required: true
+        type: choice
+        options:
+          - project-demo-ipaas-by-ai
       environment:
         description: 'Environment to deploy (dev or prd)'
         required: true
@@ -18,31 +24,27 @@ on:
 
 jobs:
   deploy-apim:
-    name: Deploy APIM to ${{ github.event.inputs.environment }}
+    name: Deploy APIM for ${{ github.event.inputs.project_name }} - ${{ github.event.inputs.environment }}
     runs-on: ubuntu-latest
     environment: ${{ github.event.inputs.environment }}
     
     defaults:
       run:
-        working-directory: project-demo-ipaas-by-ai/apim
+        working-directory: ${{ github.event.inputs.project_name }}/apim
     
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Validate Confirmation
+      - name: Validate Project APIM Directory
         run: |
-          if [ "${{ github.event.inputs.confirm }}" != "YES" ]; then
-            echo "::error::Deployment not confirmed. You must type 'YES' to proceed."
+          if [ ! -d "$GITHUB_WORKSPACE/${{ github.event.inputs.project_name }}/apim" ]; then
+            echo "::error::Project ${{ github.event.inputs.project_name }} does not have an apim/ directory."
+            echo "Only projects with APIM support are allowed. Available APIM projects:"
+            echo "  - project-demo-ipaas-by-ai"
             exit 1
           fi
-
-      - name: Check Apply Secret
-        run: |
-          if [ "${{ secrets.TERRAFORM_APPLY }}" != "true" ]; then
-            echo "::error::TERRAFORM_APPLY secret is not set to 'true'. Deployment blocked."
-            exit 1
-          fi
+          echo "✅ APIM directory found: ${{ github.event.inputs.project_name }}/apim"
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -59,6 +61,49 @@ jobs:
         run: |
           SUBSCRIPTION_ID=$(az account show --query id -o tsv)
           echo "subscription_id=$SUBSCRIPTION_ID" >> $GITHUB_OUTPUT
+
+      - name: Get Resource Group Name
+        id: rg_info
+        run: |
+          # Read the resource group name from the environment variables file or locals
+          # First check if dev.tfvars or prd.tfvars defines the RG, else extract from locals.tf
+          if grep -q "resource_group_name" "$GITHUB_WORKSPACE/${{ github.event.inputs.project_name }}/env/${{ github.event.inputs.environment }}/locals.tf" 2>/dev/null; then
+            RG_NAME=$(grep "resource_group_name" "$GITHUB_WORKSPACE/${{ github.event.inputs.project_name }}/env/${{ github.event.inputs.environment }}/locals.tf" | grep "=" | head -1 | sed 's/.*= "\(.*\)".*/\1/')
+          else
+            echo "::error::Could not determine resource group name from locals.tf"
+            exit 1
+          fi
+          if [ -z "$RG_NAME" ]; then
+            echo "::error::resource_group_name not found in ${{ github.event.inputs.project_name }}/env/${{ github.event.inputs.environment }}/locals.tf"
+            exit 1
+          fi
+          echo "resource_group_name=$RG_NAME" >> $GITHUB_OUTPUT
+          echo "Resource Group: $RG_NAME"
+
+      - name: Validate Resource Group Exists
+        run: |
+          RG_NAME="${{ steps.rg_info.outputs.resource_group_name }}"
+          if ! az group exists --name "$RG_NAME" --subscription "${{ steps.subscription.outputs.subscription_id }}" | grep -q "true"; then
+            echo "::error::Destination Resource Group '$RG_NAME' does not exist in Azure subscription."
+            echo "Please deploy the main platform first (${{ github.event.inputs.project_name }}/env/${{ github.event.inputs.environment }}/) to create the resource group."
+            echo "APIM requires existing Resource Group and Log Analytics workspace."
+            exit 1
+          fi
+          echo "✅ Resource Group '$RG_NAME' found and accessible"
+
+      - name: Validate Confirmation
+        run: |
+          if [ "${{ github.event.inputs.confirm }}" != "YES" ]; then
+            echo "::error::Deployment not confirmed. You must type 'YES' to proceed."
+            exit 1
+          fi
+
+      - name: Check Apply Secret
+        run: |
+          if [ "${{ secrets.TERRAFORM_APPLY }}" != "true" ]; then
+            echo "::error::TERRAFORM_APPLY secret is not set to 'true'. Deployment blocked."
+            exit 1
+          fi
 
       - name: Terraform Init
         run: terraform init -backend-config=backend.tfvars
