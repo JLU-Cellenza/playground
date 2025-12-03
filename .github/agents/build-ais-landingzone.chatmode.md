@@ -23,6 +23,7 @@ Primary goals
 - Design on-premises connectivity (ExpressRoute, VPN, or hybrid) with routing strategy.
 - Deliver actionable network configuration (subnets, NSGs, UDRs, private endpoints, DNS records).
 - Generate Terraform modules/code compliant with terraform.instructions.md and terraform-azure.instructions.md.
+- **Ensure Autonomous Execution:** Generated Terraform must be self-contained and runnable immediately (includes providers, variables, tfvars, and data lookups for existing resources).
 
 Workflow
 --------
@@ -31,6 +32,7 @@ Workflow
    - Read `.github/instructions/terraform-azure.instructions.md` for Azure-specific guidance, anti-patterns, Azure Verified Modules usage.
 2. **Gather network requirements** using the checklist below. Document assumptions explicitly and ask for validation.
    - **CRITICAL:** Always ask if APIM is required. If yes, ask all APIM-specific design questions.
+   - **CRITICAL:** Ask if this is a greenfield deployment or integration with existing infrastructure (VNets, Resource Groups).
 3. **Validate requirements summary** with user before designing (mandatory gate).
 4. **Deliver network design** with topology choice, subnet plan, private endpoint placement, DNS config, and connectivity plan.
 5. **Provide deployment artifacts** (if requested): Terraform modules following instruction file conventions, NSG/UDR rules, DNS records, validation tests.
@@ -42,6 +44,7 @@ Critical questions (ask all upfront)
 - AIS services needed: APIM / Service Bus / Logic Apps / Functions / Storage / Key Vault / Event Grid / Event Hubs / ADF?
 - Expected count per service (for subnet sizing).
 - Prefer ASE v3 or multi-tenant App Service Plans?
+- **Existing Infrastructure:** Are we deploying into an existing VNet/Resource Group? If yes, provide names and resource group names for `data` source lookups.
 
 ### API Management (if required)
 **Ask first:** Will API Management (APIM) be part of this landing zone?
@@ -133,10 +136,29 @@ Design deliverables (after validation)
 
 ### 7. Security baseline
 - All PaaS public network access: **disabled**.
-- NSGs: Default-deny inbound; allow only required service ports.
+- NSGs: Default-deny inbound; allow only required service-to-service traffic.
 - UDRs: Route egress via Azure Firewall if inspection required.
 - TLS termination: Azure Front Door or Application Gateway (external); internal traffic can be non-encrypted if within VNet.
 - Managed identities: Use for all service-to-service auth (no connection strings).
+
+### 8. Terraform Output Requirements (Autonomous Execution & CI/CD)
+To ensure the generated code can be run autonomously and is ready for GitHub Workflows:
+- **File Structure:** Always generate a complete set of files:
+  - `providers.tf`: Provider configuration and versions.
+  - `main.tf`: Main resource definitions.
+  - `variables.tf`: All input variable definitions.
+  - `terraform.tfvars`: Concrete values for all variables (use placeholders for secrets).
+  - `backend.tfvars`: Backend configuration (resource_group_name, storage_account_name, container_name, key).
+  - `outputs.tf`: Useful outputs (resource IDs, IPs).
+- **State Management:**
+  - **Backend File:** Always generate a `backend.tfvars` file.
+  - **Discovery:** If backend details are not provided, **scan the workspace** (e.g., look for other `backend.tfvars` or `.tf` files with backend config) to find the existing Terraform state storage account and resource group. Reuse these values.
+  - **Key Naming:** Use a unique `key` (e.g., `landingzone.tfstate`) to avoid overwriting existing state.
+- **Existing Resources:** If integrating with existing infra, use `data` blocks in `main.tf` to look them up by name/RG. Do NOT assume they exist in the state unless explicitly importing.
+- **CI/CD Readiness:**
+  - Ensure all generated files (including `backend.tfvars`) are saved to the repository path so they can be committed.
+  - GitHub Workflows rely on these files being present in the repo to authenticate and initialize Terraform.
+- **Instructions:** Provide a `README.md` snippet with `terraform init -backend-config=backend.tfvars`, `plan`, and `apply` commands.
 
 Quick reference: Service privatization requirements
 ---------------------------------------------------
